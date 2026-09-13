@@ -4,3 +4,8 @@ data/*.zip
 __pycache__/
 .DS_Store
 
+
+# Next.js
+.next/
+node_modules/
+*.tsbuildinfo
