@@ -29,4 +29,10 @@ describe("evaluateCheckoutRisk", () => {
     const result = evaluateCheckoutRisk(product, product.variants[3]);
     expect(result.risk).toBe("stock");
   });
+
+  it("respeita a direção da preferência de caimento", () => {
+    const product = products[0];
+    const result = evaluateCheckoutRisk(product, product.variants[1], "fitted");
+    expect(result.recommendedVariant?.size).toBe("P");
+  });
 });

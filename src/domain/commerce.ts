@@ -10,6 +10,7 @@ export type ProductVariant = Pick<
   price: number;
   returnRate: number;
   defectRate: number;
+  evidenceOrigin?: "provided" | "derived" | "synthetic";
 };
 
 export type Product = Pick<
@@ -20,6 +21,7 @@ export type Product = Pick<
   color: string;
   accent: string;
   badge?: string;
+  imageKey?: "sand" | "charcoal";
   variants: ProductVariant[];
   alternativeProductId?: string;
 };

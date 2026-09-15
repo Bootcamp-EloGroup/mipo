@@ -9,18 +9,24 @@ export type RiskResult = {
   alternativeProductId?: string;
 };
 
-export function evaluateCheckoutRisk(product: Product, selected: ProductVariant): RiskResult {
+export type FitPreference = "fitted" | "regular" | "loose";
+export type MipoThresholds = { highReturnRate: number; minimumImprovement: number; lowStockQuantity: number };
+const sizeOrder = { P: 0, M: 1, G: 2, GG: 3 } as const;
+const defaultThresholds: MipoThresholds = { highReturnRate: 0.25, minimumImprovement: 0.08, lowStockQuantity: 3 };
+
+export function evaluateCheckoutRisk(product: Product, selected: ProductVariant, fitPreference: FitPreference = "regular", thresholds: MipoThresholds = defaultThresholds): RiskResult {
   const betterSize = product.variants
     .filter((variant) => (variant.inventory_quantity ?? 0) > 0)
-    .filter((variant) => selected.returnRate - variant.returnRate >= 0.08)
+    .filter((variant) => selected.returnRate - variant.returnRate >= thresholds.minimumImprovement)
+    .filter((variant) => fitPreference === "regular" || (fitPreference === "fitted" ? sizeOrder[variant.size] <= sizeOrder[selected.size] : sizeOrder[variant.size] >= sizeOrder[selected.size]))
     .sort((a, b) => a.returnRate - b.returnRate)[0];
 
-  if (selected.returnRate >= 0.25 && betterSize) {
+  if (selected.returnRate >= thresholds.highReturnRate && betterSize) {
     return {
       risk: "size",
       level: "high",
-      evidence: `${Math.round(selected.returnRate * 100)}% de devoluções observadas neste tamanho; ${Math.round(betterSize.returnRate * 100)}% no ${betterSize.size}.`,
-      message: `Este modelo costuma vestir menor. O tamanho ${betterSize.size} pode oferecer um ajuste melhor.`,
+      evidence: selected.evidenceOrigin === "synthetic" ? `Cenário demonstrativo: ${Math.round(selected.returnRate * 100)}% nesta variação e ${Math.round(betterSize.returnRate * 100)}% no ${betterSize.size}.` : `${Math.round(selected.returnRate * 100)}% de devoluções observadas nesta variação; ${Math.round(betterSize.returnRate * 100)}% no ${betterSize.size}.`,
+      message: `Considerando o cenário e sua preferência de caimento, o tamanho ${betterSize.size} pode oferecer um ajuste melhor.`,
       recommendedVariant: betterSize,
     };
   }
@@ -35,7 +41,7 @@ export function evaluateCheckoutRisk(product: Product, selected: ProductVariant)
     };
   }
 
-  if ((selected.inventory_quantity ?? 0) <= 3) {
+  if ((selected.inventory_quantity ?? 0) <= thresholds.lowStockQuantity) {
     return {
       risk: "stock",
       level: "medium",
