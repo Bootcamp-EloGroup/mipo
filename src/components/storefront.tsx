@@ -131,7 +131,7 @@ function ProductDetail({ product, persistent, onBack, onAdded, onAlternative }: 
 
           <fieldset className="size-picker">
             <legend><span>Tamanho: <b>{selected?.size ?? "selecione"}</b></span><button type="button">Guia de medidas</button></legend>
-            <div>{product.variants.map((variant) => <button type="button" className={selected?.id === variant.id ? "selected" : ""} onClick={() => choose(variant)} key={variant.id}>{variant.size}</button>)}</div>
+            <div>{product.variants.map((variant) => { const soldOut=(variant.inventory_quantity??0)===0; return <button type="button" className={selected?.id === variant.id ? "selected" : ""} onClick={() => choose(variant)} key={variant.id} aria-label={`${variant.size}${soldOut?", esgotado":""}`}>{variant.size}{soldOut&&<small>Esgotado</small>}</button>; })}</div>
           </fieldset>
 
           <fieldset className="fit-picker"><legend>Como você prefere o caimento?</legend><div>{([["fitted","Mais ajustado"],["regular","Regular"],["loose","Mais solto"]] as const).map(([value,label]) => <button type="button" key={value} aria-pressed={fitPreference === value} className={fitPreference === value ? "selected" : ""} onClick={() => { setFitPreference(value); if (selected) void choose(selected, value); }}>{label}</button>)}</div><small>Preferência opcional usada apenas neste cenário demonstrativo.</small></fieldset>
@@ -144,7 +144,7 @@ function ProductDetail({ product, persistent, onBack, onAdded, onAlternative }: 
                 <p className="mipo-label">Escolha assistida · MIPO</p>
                 <h2>{result.message}</h2>
                 <p>{result.evidence}</p>
-                {result.risk !== "none" && !decision && <div className="mipo-actions">
+                {(result.recommendedVariant || result.alternativeProductId) && !decision && <div className="mipo-actions">
                   {result.recommendedVariant && <button onClick={acceptRecommendation}>Usar tamanho {result.recommendedVariant.size}</button>}
                   {result.alternativeProductId && <button onClick={() => onAlternative(result.alternativeProductId!)}>Ver alternativa</button>}
                   <button className="quiet" onClick={keepOriginal}>Manter minha escolha</button>
@@ -154,8 +154,8 @@ function ProductDetail({ product, persistent, onBack, onAdded, onAlternative }: 
             </aside>
           )}
 
-          <button className="primary-action" disabled={!selected || evaluating || (!!result && result.risk !== "none" && !decision && !!(result.recommendedVariant || result.alternativeProductId))} onClick={async () => { if (!selected) return; if (persistent && interventionId && result?.risk === "none") await commerceApi.decide(interventionId, "not_required"); await onAdded(product, selected, decision); }}>
-            <span>Adicionar à sacola</span><Icon name="arrow" />
+          <button className="primary-action" disabled={!selected || (selected.inventory_quantity??0)===0 || evaluating || (!!result && result.risk !== "none" && !decision && !!(result.recommendedVariant || result.alternativeProductId))} onClick={async () => { if (!selected) return; if (persistent && interventionId && !result?.recommendedVariant && !result?.alternativeProductId) await commerceApi.decide(interventionId, "not_required"); await onAdded(product, selected, decision); }}>
+            <span>{selected&&(selected.inventory_quantity??0)===0?"Tamanho esgotado":"Adicionar à sacola"}</span><Icon name="arrow" />
           </button>
           <div className="detail-notes"><span>Frete grátis acima de R$ 500</span><span>Troca em até 30 dias</span></div>
         </section>
@@ -231,6 +231,6 @@ export function Storefront() {
     {!serviceError && view === "checkout" && <Checkout cart={cart} onBack={() => setView("cart")} onFinish={() => void finishDemo()} />}
     {view === "success" && <main className="success-page"><p className="eyebrow">Demonstração concluída</p><span className="success-mark">✓</span><h1>Escolha registrada.<br/><em>Nenhuma compra foi realizada.</em></h1><p>O fluxo visual terminou aqui. Em uma integração real, o pedido seria criado pelo backend Medusa.</p><button className="primary-action" onClick={() => setView("catalog")}>Voltar à coleção <Icon name="arrow" /></button></main>}
     {toast && <div className="toast" role="status">{toast}</div>}
-    <footer><div className="wordmark">VÉRTICE<span>atelier cotidiano</span></div><p>Uma demonstração de escolha assistida pelo MIPO.</p><p>© 2026 · Case EloGroup</p></footer>
+    <footer><div className="wordmark">VÉRTICE<span>atelier cotidiano</span></div><p>Uma demonstração de escolha assistida pelo MIPO. <a href="/painel">Painel MIPO →</a></p><p>© 2026 · Case EloGroup</p></footer>
   </div>;
 }

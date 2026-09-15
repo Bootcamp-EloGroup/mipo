@@ -98,7 +98,7 @@ const productByKey = new Map(products.map((product) => [product.source_key, prod
 const variants = [];
 for (const group of groups.values()) group.rows.forEach((data, index) => {
   const metric = salesBySku.get(data.sku_id) ?? { sales: 0, returns: 0, defects: 0 }; const synthetic = curatedKeys.has(group.key); const size = synthetic ? sizes[index % 4] : null;
-  variants.push({ id: uuid(`variant:${fileHash}:${data.sku_id}`), product_id: productByKey.get(group.key).id, source_sku: data.sku_id, title: size ?? data.sku_id, size, color_name: synthetic ? (index % 2 ? "Natural" : "Principal") : null, price_cents: cents(data.preco_venda_sugerido), return_rate: metric.sales ? metric.returns / metric.sales : null, defect_rate: metric.sales ? metric.defects / metric.sales : null, attributes_origin: synthetic ? "synthetic" : "provided" });
+  variants.push({ id: uuid(`variant:${fileHash}:${data.sku_id}`), product_id: productByKey.get(group.key).id, source_sku: data.sku_id, title: size ?? data.sku_id, size, color_name: synthetic ? (index % 2 ? "Natural" : "Principal") : null, price_cents: cents(data.preco_venda_sugerido), sales_count: metric.sales, return_rate: metric.sales ? metric.returns / metric.sales : null, defect_rate: metric.sales ? metric.defects / metric.sales : null, attributes_origin: synthetic ? "synthetic" : "provided" });
 });
 const variantBySku = new Map(variants.map((variant) => [variant.source_sku, variant]));
 const capturedAt = new Date().toISOString();

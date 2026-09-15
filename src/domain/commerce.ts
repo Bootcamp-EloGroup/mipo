@@ -10,6 +10,7 @@ export type ProductVariant = Pick<
   price: number;
   returnRate: number;
   defectRate: number;
+  salesCount?: number;
   evidenceOrigin?: "provided" | "derived" | "synthetic";
 };
 
@@ -58,6 +59,6 @@ export type MipoEvent = {
   productId: string;
   selectedVariantId: string;
   recommendedVariantId?: string;
-  risk: "size" | "quality" | "stock" | "none";
+  risk: "size" | "quality" | "stock" | "none" | "insufficient_evidence";
   decision: "accepted" | "kept_original" | "not_required";
 };
