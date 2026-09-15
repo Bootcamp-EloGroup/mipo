@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 const args = new Map();
 for (let index = 2; index < process.argv.length; index += 1) {
   const key = process.argv[index];
+  if (key === "--") continue;
   if (key === "--apply") args.set(key, true);
   else args.set(key, process.argv[++index]);
 }
