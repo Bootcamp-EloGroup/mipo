@@ -25,7 +25,7 @@ describe("fronteira de segurança do Supabase", () => {
   });
 
   it("garante a sessão antes de persistir uma intervenção", () => {
-    const source=readFileSync("app/api/mipo/evaluate/route.ts","utf8");
+    const source=readFileSync("src/app/api/mipo/evaluate/route.ts","utf8");
     expect(source.indexOf('anonymous_sessions?on_conflict=id')).toBeGreaterThan(-1);
     expect(source.indexOf('anonymous_sessions?on_conflict=id')).toBeLessThan(source.indexOf('"mipo_interventions"'));
   });

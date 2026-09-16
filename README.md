@@ -102,6 +102,6 @@ Configure somente no servidor: `ELOAGENTS_API_KEY`, `ELOAGENTS_MODEL` e `GROQ_AP
 
 ### Runtime Python opcional
 
-O agente também pode rodar em FastAPI + LangGraph, mantendo o mesmo contrato da rota Next.js. Inicie com `cd agent_service && uv sync --dev && uv run uvicorn mipo_agent.main:app --reload`, configure `MIPO_AGENT_RUNTIME=python` e mantenha `MIPO_PYTHON_AGENT_URL=http://127.0.0.1:8000`. Se o módulo Python estiver indisponível, o adapter retorna ao runtime TypeScript durante a migração.
+O agente também pode rodar em FastAPI + LangGraph, mantendo o mesmo contrato da rota Next.js. Inicie com `cd services/agent && uv sync --dev && uv run uvicorn mipo_agent.main:app --reload`, configure `MIPO_AGENT_RUNTIME=python` e mantenha `MIPO_PYTHON_AGENT_URL=http://127.0.0.1:8000`. Se o módulo Python estiver indisponível, o adapter retorna ao runtime TypeScript durante a migração.
 
 O desenho técnico e seus limites estão em [`docs/arquitetura-agente-react.md`](docs/arquitetura-agente-react.md).

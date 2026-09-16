@@ -1,5 +1,17 @@
 # Arquitetura do agente ReAct MIPO
 
+## Organização do código
+
+- `src/app`: páginas e rotas HTTP do Next.js.
+- `src/components`: storefront e painel.
+- `src/domain`: contratos compartilhados do ecommerce e do agente.
+- `src/server`: adapters e implementações executadas somente no servidor.
+- `src/services`: regras determinísticas e clientes usados pela aplicação.
+- `services/agent`: processo Python com FastAPI, Pydantic e LangGraph.
+- `supabase`: migrations e funções do banco.
+
+O Next.js é o dono da sessão e da experiência web. O processo Python fica atrás da interface `explain(context) -> answer`; detalhes de LangGraph e dos provedores não atravessam esse seam.
+
 ## Responsabilidade
 
 O agente escolhe uma estratégia de comunicação dentro das ações liberadas pelo motor MIPO. Ele não calcula fórmulas por conta própria, não altera risco ou variantes e não acessa livremente banco, internet ou dados de sessão.
