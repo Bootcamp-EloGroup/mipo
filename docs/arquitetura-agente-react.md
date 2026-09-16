@@ -33,7 +33,7 @@ Cada passo recebe somente as observações estruturadas acumuladas e a próxima 
 
 - EloAgents: endpoint OpenAI-compatible configurado por `ELOAGENTS_BASE_URL`; JSON Schema estrito mais validação local. O modelo validado para este contrato é `gpt-54-mini`, sem prefixo de provedor.
 - Groq: Chat Completions com JSON Schema estrito e validação local adicional.
-- Nenhum SDK ou framework de agentes é necessário.
+- FastAPI expõe o contrato HTTP e LangGraph governa a sequência explícita das tools; LangChain fornece o cliente OpenAI-compatible dos provedores.
 
 ## Persistência e privacidade
 

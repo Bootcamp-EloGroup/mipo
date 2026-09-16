@@ -21,7 +21,7 @@ describe("fronteira de segurança do Supabase", () => {
   });
 
   it("mantém provedores e orquestrador ReAct exclusivos do servidor", () => {
-    for (const file of ["src/server/mipo-agent-provider.ts","src/server/mipo-react-agent.ts"]) expect(readFileSync(file,"utf8")).toContain('import "server-only"');
+    expect(readFileSync("src/server/mipo-python-agent.ts","utf8")).toContain('import "server-only"');
   });
 
   it("garante a sessão antes de persistir uma intervenção", () => {
