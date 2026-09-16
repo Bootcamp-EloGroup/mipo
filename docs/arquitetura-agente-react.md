@@ -11,10 +11,11 @@ O agente escolhe uma estratégia de comunicação dentro das ações liberadas p
 3. `/api/mipo/explain` valida que a intervenção pertence à sessão anônima.
 4. O orquestrador exige a sequência `get_product_evidence` → `calculate_mipo_risk` → `get_allowed_actions` → `final_answer`.
 5. Cada ação do modelo é validada antes de executar uma tool.
-6. EloAgents é chamado primeiro em cada passo. Falha, timeout ou JSON inválido acionam Groq.
+6. EloAgents é chamado primeiro. Falha, timeout ou JSON inválido tornam Groq o provedor dos passos restantes da execução, evitando repetir uma falha já observada.
 7. A resposta final passa por política de ação, fidelidade, tamanho e linguagem. Uma violação preserva a mensagem determinística.
 
 O loop aceita no máximo quatro passos. Repetição, mudança de ordem ou encerramento antecipado são rejeitados.
+Cada passo recebe somente as observações estruturadas acumuladas e a próxima ação esperada; respostas anteriores do modelo não são reapresentadas como instruções.
 
 ## Contrato dos provedores
 
