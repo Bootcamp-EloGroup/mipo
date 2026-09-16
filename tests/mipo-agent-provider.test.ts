@@ -5,11 +5,14 @@ vi.mock("server-only",()=>({}));
 describe("adaptador dos provedores do agente",()=>{
   beforeEach(()=>{vi.unstubAllGlobals();process.env.ELOAGENTS_API_KEY="test-only";process.env.ELOAGENTS_MODEL="test-model";process.env.ELOAGENTS_BASE_URL="https://elo.test/api";process.env.GROQ_API_KEY="test-only";process.env.GROQ_MODEL="openai/gpt-oss-20b";});
 
-  it("usa JSON simples no EloAgents e nunca envia a chave no corpo",async()=>{
+  it("usa JSON Schema estrito no EloAgents e nunca envia a chave no corpo",async()=>{
     const fetchMock=vi.fn().mockResolvedValue(new Response(JSON.stringify({choices:[{message:{content:'{"type":"tool_call"}'}}]}),{status:200}));vi.stubGlobal("fetch",fetchMock);
-    const {callProvider}=await import("../src/server/mipo-agent-provider"); await callProvider("eloagents",[{role:"user",content:"teste"}],100);
+    const {callProvider}=await import("../src/server/mipo-agent-provider"); await callProvider("eloagents",[{role:"user",content:"teste"}],100,"get_product_evidence");
     const [url,init]=fetchMock.mock.calls[0]; const body=JSON.parse(String(init.body));
-    expect(url).toBe("https://elo.test/api/chat/completions"); expect(body.response_format).toEqual({type:"json_object"}); expect(String(init.body)).not.toContain("test-only");
+    expect(url).toBe("https://elo.test/api/chat/completions");
+    expect(body.response_format.json_schema.strict).toBe(true);
+    expect(body.response_format.json_schema.name).toBe("mipo_react_get_product_evidence");
+    expect(String(init.body)).not.toContain("test-only");
   });
 
   it("exige JSON Schema estrito no fallback Groq",async()=>{
@@ -19,6 +22,21 @@ describe("adaptador dos provedores do agente",()=>{
     expect(body.response_format.json_schema.name).toBe("mipo_react_get_product_evidence");
     expect(body.response_format.json_schema.schema.properties.tool.enum).toEqual(["get_product_evidence"]);
     expect(body.max_completion_tokens).toBe(1024); expect(body.reasoning_effort).toBe("low"); expect(body.tool_choice).toBe("none");
+  });
+
+  it("restringe o tamanho da mensagem no schema da resposta final",async()=>{
+    const fetchMock=vi.fn().mockResolvedValue(new Response(JSON.stringify({choices:[{message:{content:'{"type":"final_answer"}'}}]}),{status:200}));vi.stubGlobal("fetch",fetchMock);
+    const {callProvider}=await import("../src/server/mipo-agent-provider"); await callProvider("eloagents",[{role:"user",content:"teste"}],100,"final_answer");
+    const body=JSON.parse(String(fetchMock.mock.calls[0][1].body));
+    expect(body.response_format.json_schema.schema.properties.message).toMatchObject({type:"string",minLength:12,maxLength:240,pattern:"^[A-Za-zÀ-ÖØ-öø-ÿ .,;:!?()'-]+$"});
+  });
+
+  it("restringe a resposta final às mensagens autorizadas",async()=>{
+    const fetchMock=vi.fn().mockResolvedValue(new Response(JSON.stringify({choices:[{message:{content:'{"type":"final_answer"}'}}]}),{status:200}));vi.stubGlobal("fetch",fetchMock);
+    const {callProvider}=await import("../src/server/mipo-agent-provider"); const allowed=["Mensagem segura para esta evidência."];
+    await callProvider("eloagents",[{role:"user",content:"teste"}],100,"final_answer",allowed);
+    const body=JSON.parse(String(fetchMock.mock.calls[0][1].body));
+    expect(body.response_format.json_schema.schema.properties.message.enum).toEqual(allowed);
   });
 
   it("interrompe uma chamada que ultrapassa o timeout",async()=>{

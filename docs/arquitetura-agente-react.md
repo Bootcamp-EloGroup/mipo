@@ -12,14 +12,14 @@ O agente escolhe uma estratégia de comunicação dentro das ações liberadas p
 4. O orquestrador exige a sequência `get_product_evidence` → `calculate_mipo_risk` → `get_allowed_actions` → `final_answer`.
 5. Cada ação do modelo é validada antes de executar uma tool.
 6. EloAgents é chamado primeiro. Falha, timeout ou JSON inválido tornam Groq o provedor dos passos restantes da execução, evitando repetir uma falha já observada.
-7. A resposta final passa por política de ação, fidelidade, tamanho e linguagem. Uma violação preserva a mensagem determinística.
+7. Na resposta final, o agente escolhe uma mensagem entre as alternativas autorizadas para o risco observado. A política valida ação, justificativa e mensagem; qualquer violação preserva a mensagem determinística.
 
 O loop aceita no máximo quatro passos. Repetição, mudança de ordem ou encerramento antecipado são rejeitados.
 Cada passo recebe somente as observações estruturadas acumuladas e a próxima ação esperada; respostas anteriores do modelo não são reapresentadas como instruções.
 
 ## Contrato dos provedores
 
-- EloAgents: endpoint OpenAI-compatible configurado por `ELOAGENTS_BASE_URL`; JSON mode mais validação local. O identificador atual é `gemini-3-flash-preview`, sem prefixo de provedor.
+- EloAgents: endpoint OpenAI-compatible configurado por `ELOAGENTS_BASE_URL`; JSON Schema estrito mais validação local. O modelo validado para este contrato é `gpt-54-mini`, sem prefixo de provedor.
 - Groq: Chat Completions com JSON Schema estrito e validação local adicional.
 - Nenhum SDK ou framework de agentes é necessário.
 
