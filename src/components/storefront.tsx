@@ -100,8 +100,10 @@ function ProductDetail({ product, persistent, onBack, onAdded, onAlternative }: 
   const [evaluating, setEvaluating] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiAssisted, setAiAssisted] = useState(false);
+  const [decisionLoading, setDecisionLoading] = useState(false);
   const activeIntervention = useRef<string|undefined>(undefined);
   const decisionRef = useRef<typeof decision>(undefined);
+  const sizePickerRef = useRef<HTMLFieldSetElement>(null);
 
   async function choose(variant: ProductVariant, fit = fitPreference) {
     setSelected(variant); setDecision(undefined); decisionRef.current=undefined; setEvaluating(true); setAiAssisted(false); setAiLoading(false);
@@ -124,6 +126,27 @@ function ProductDetail({ product, persistent, onBack, onAdded, onAlternative }: 
     decisionRef.current="kept_original";
   }
 
+  async function continueWithSelection() {
+    if (!selected || !result || decisionLoading) return;
+    setDecisionLoading(true);
+    try {
+      if (persistent && interventionId) await commerceApi.decide(interventionId, "kept_original");
+      else recordMipoEvent({ productId: product.id, selectedVariantId: selected.id, risk: result.risk, decision: "kept_original" });
+      setDecision("kept_original");
+      decisionRef.current="kept_original";
+      await onAdded(product, selected, "kept_original");
+    } finally { setDecisionLoading(false); }
+  }
+
+  function chooseAnotherSize() {
+    const alternative=product.variants.find((variant)=>variant.id!==selected?.id&&(variant.inventory_quantity??0)>0);
+    sizePickerRef.current?.scrollIntoView({behavior:"smooth",block:"center"});
+    if(alternative) window.setTimeout(()=>document.getElementById(`size-${alternative.id}`)?.focus(),250);
+  }
+
+  const stockNeedsDecision=Boolean(selected&&result?.risk==="stock"&&(selected.inventory_quantity??0)>0&&!decision);
+  const requiresDecision=Boolean(result&&result.risk!=="none"&&!decision&&(result.recommendedVariant||result.alternativeProductId||stockNeedsDecision));
+
   return (
     <main className="detail-page">
       <button className="back-link" onClick={onBack}>← Coleção / {product.category}</button>
@@ -136,9 +159,9 @@ function ProductDetail({ product, persistent, onBack, onAdded, onAlternative }: 
           <p className="price">{money.format(product.variants[0].price / 100)}</p>
           <p className="description">{product.description}</p>
 
-          <fieldset className="size-picker">
+          <fieldset className="size-picker" ref={sizePickerRef}>
             <legend><span>Tamanho: <b>{selected?.size ?? "selecione"}</b></span><button type="button">Guia de medidas</button></legend>
-            <div>{product.variants.map((variant) => { const soldOut=(variant.inventory_quantity??0)===0; return <button type="button" className={selected?.id === variant.id ? "selected" : ""} onClick={() => choose(variant)} key={variant.id} aria-label={`${variant.size}${soldOut?", esgotado":""}`}>{variant.size}{soldOut&&<small>Esgotado</small>}</button>; })}</div>
+            <div>{product.variants.map((variant) => { const soldOut=(variant.inventory_quantity??0)===0; return <button id={`size-${variant.id}`} type="button" className={selected?.id === variant.id ? "selected" : ""} onClick={() => choose(variant)} key={variant.id} aria-label={`${variant.size}${soldOut?", esgotado":""}`}>{variant.size}{soldOut&&<small>Esgotado</small>}</button>; })}</div>
           </fieldset>
 
           <fieldset className="fit-picker"><legend>Como você prefere o caimento?</legend><div>{([["fitted","Mais ajustado"],["regular","Regular"],["loose","Mais solto"]] as const).map(([value,label]) => <button type="button" key={value} aria-pressed={fitPreference === value} className={fitPreference === value ? "selected" : ""} onClick={() => { setFitPreference(value); if (selected) void choose(selected, value); }}>{label}</button>)}</div><small>Preferência opcional usada apenas neste cenário demonstrativo.</small></fieldset>
@@ -153,16 +176,20 @@ function ProductDetail({ product, persistent, onBack, onAdded, onAlternative }: 
                 <p>{result.evidence}</p>
                 {aiLoading&&<p className="mipo-ai-status" role="status">Aprimorando a explicação…</p>}
                 {(result.recommendedVariant || result.alternativeProductId) && !decision && <div className="mipo-actions">
-                  {result.recommendedVariant && <button onClick={acceptRecommendation}>Usar tamanho {result.recommendedVariant.size}</button>}
-                  {result.alternativeProductId && <button onClick={() => onAlternative(result.alternativeProductId!)}>Ver alternativa</button>}
-                  <button className="quiet" onClick={keepOriginal}>Manter minha escolha</button>
+                  {result.recommendedVariant && <button type="button" onClick={acceptRecommendation}>Usar tamanho {result.recommendedVariant.size}</button>}
+                  {result.alternativeProductId && <button type="button" onClick={() => onAlternative(result.alternativeProductId!)}>Ver alternativa</button>}
+                  <button type="button" className="quiet" onClick={keepOriginal}>Manter minha escolha</button>
+                </div>}
+                {stockNeedsDecision&&<div className="mipo-actions mipo-actions--stock">
+                  <button type="button" disabled={decisionLoading} onClick={continueWithSelection}>{decisionLoading?"Registrando escolha…":`Continuar com ${selected.size}`}</button>
+                  <button type="button" className="quiet" disabled={decisionLoading} onClick={chooseAnotherSize}>Escolher outro tamanho</button>
                 </div>}
                 {decision && <p className="decision-note">✓ Decisão registrada: {decision === "accepted" ? "recomendação aceita" : "escolha original mantida"}.</p>}
               </div>
             </aside>
           )}
 
-          <button className="primary-action" disabled={!selected || (selected.inventory_quantity??0)===0 || evaluating || (!!result && result.risk !== "none" && !decision && !!(result.recommendedVariant || result.alternativeProductId))} onClick={async () => { if (!selected) return; if (persistent && interventionId && !result?.recommendedVariant && !result?.alternativeProductId) await commerceApi.decide(interventionId, "not_required"); await onAdded(product, selected, decision); }}>
+          <button className="primary-action" disabled={!selected || (selected.inventory_quantity??0)===0 || evaluating || decisionLoading || requiresDecision} onClick={async () => { if (!selected) return; if (persistent && interventionId && !result?.recommendedVariant && !result?.alternativeProductId) await commerceApi.decide(interventionId, "not_required"); await onAdded(product, selected, decision); }}>
             <span>{selected&&(selected.inventory_quantity??0)===0?"Tamanho esgotado":"Adicionar à sacola"}</span><Icon name="arrow" />
           </button>
           <div className="detail-notes"><span>Frete grátis acima de R$ 500</span><span>Troca em até 30 dias</span></div>
