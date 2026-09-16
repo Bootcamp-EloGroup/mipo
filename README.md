@@ -82,6 +82,7 @@ Os atributos de tamanho e cor inexistentes nos CSVs são armazenados com origem 
 - `POST /api/cart/items`
 - `PATCH /api/cart/items/:id`, `DELETE /api/cart/items/:id`
 - `POST /api/mipo/evaluate`
+- `POST /api/mipo/explain`
 - `POST /api/mipo/decisions`
 - `GET /api/dashboard`
 
@@ -92,3 +93,15 @@ Todas as tabelas têm RLS habilitada e não concedem acesso a `anon` ou `authent
 O painel agregado fica em `/painel`, sem identificadores completos de sessão ou dados pessoais. O catálogo diferencia explicitamente tipo de produto e significado da variante; a experiência atual seleciona somente itens de `Moda` para o fluxo de tamanho.
 
 Consulte [`docs/roteiro-demonstracao.md`](docs/roteiro-demonstracao.md). Para remover apenas sessões criadas explicitamente com `MIPO_DEMO_MODE=true`, execute `corepack pnpm data:reset-demo`; catálogo e histórico estão fora do escopo da função.
+
+## Agente ReAct
+
+Com `AI_EXPLANATIONS_ENABLED=true`, a avaliação determinística aparece imediatamente e o frontend solicita uma explicação enriquecida em segundo plano. O agente executa, em ordem, as tools `get_product_evidence`, `calculate_mipo_risk` e `get_allowed_actions`; somente então pode produzir `final_answer`. EloAgents é o provedor primário, Groq é o fallback e a mensagem determinística preserva a experiência se ambos falharem.
+
+Configure somente no servidor: `ELOAGENTS_API_KEY`, `ELOAGENTS_MODEL` e `GROQ_API_KEY`. O agente não acessa livremente o banco ou a internet, não mantém memória do usuário e não pode alterar risco, variante, estoque ou elegibilidade calculados pelo motor MIPO. Execuções e passos são auditados sem prompt bruto ou raciocínio interno.
+
+### Runtime Python
+
+O agente roda em FastAPI + LangGraph e mantém um contrato estreito com a rota Next.js. Inicie com `cd services/agent && uv sync --dev && uv run uvicorn mipo_agent.main:app --reload` e mantenha `MIPO_PYTHON_AGENT_URL=http://127.0.0.1:8000`. Se o processo Python estiver indisponível, a rota preserva a mensagem determinística; não existe um segundo agente em TypeScript.
+
+O desenho técnico e seus limites estão em [`docs/arquitetura-agente-react.md`](docs/arquitetura-agente-react.md).

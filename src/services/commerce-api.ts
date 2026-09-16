@@ -14,5 +14,6 @@ export const commerceApi = {
   updateItem: (id: string, quantity: number) => request<Cart>(`/api/cart/items/${id}`, { method: "PATCH", body: JSON.stringify({ quantity }) }),
   removeItem: (id: string) => request<Cart>(`/api/cart/items/${id}`, { method: "DELETE" }),
   evaluate: (productId: string, variantId: string, fitPreference?: "fitted"|"regular"|"loose") => request<{interventionId:string;result:unknown}>("/api/mipo/evaluate", { method: "POST", body: JSON.stringify({ productId, variantId, fitPreference }) }),
+  explain: (interventionId:string) => request<{enabled:boolean;answer?:{message:string;provider:string;status:string}}>("/api/mipo/explain", {method:"POST",body:JSON.stringify({interventionId})}),
   decide: (interventionId: string, decision: "accepted"|"kept_original"|"not_required") => request<{recorded:boolean}>("/api/mipo/decisions", { method: "POST", body: JSON.stringify({ interventionId, decision }) }),
 };

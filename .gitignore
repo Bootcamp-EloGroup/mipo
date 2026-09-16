@@ -2,6 +2,8 @@ data/*.csv
 data/*.zip
 .ipynb_checkpoints/
 __pycache__/
+.venv/
+.pytest_cache/
 .DS_Store
 
 

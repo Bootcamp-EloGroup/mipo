@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { products as localProducts } from "@/src/data/products";
 import type { Cart, Product, ProductVariant } from "@/src/domain/commerce";
@@ -98,10 +98,16 @@ function ProductDetail({ product, persistent, onBack, onAdded, onAlternative }: 
   const [interventionId, setInterventionId] = useState<string>();
   const [fitPreference, setFitPreference] = useState<"fitted" | "regular" | "loose">("regular");
   const [evaluating, setEvaluating] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAssisted, setAiAssisted] = useState(false);
+  const [decisionLoading, setDecisionLoading] = useState(false);
+  const activeIntervention = useRef<string|undefined>(undefined);
+  const decisionRef = useRef<typeof decision>(undefined);
+  const sizePickerRef = useRef<HTMLFieldSetElement>(null);
 
   async function choose(variant: ProductVariant, fit = fitPreference) {
-    setSelected(variant); setDecision(undefined); setEvaluating(true);
-    try { if (persistent) { const response = await commerceApi.evaluate(product.id, variant.id, fit); setResult(response.result as RiskResult); setInterventionId(response.interventionId); } else { setResult(evaluateCheckoutRisk(product, variant, fit)); setInterventionId(undefined); } }
+    setSelected(variant); setDecision(undefined); decisionRef.current=undefined; setEvaluating(true); setAiAssisted(false); setAiLoading(false);
+    try { if (persistent) { const response = await commerceApi.evaluate(product.id, variant.id, fit); setResult(response.result as RiskResult); setInterventionId(response.interventionId); activeIntervention.current=response.interventionId; setAiLoading(true); void commerceApi.explain(response.interventionId).then((explanation)=>{if(explanation.enabled&&explanation.answer&&activeIntervention.current===response.interventionId&&!decisionRef.current){setResult((current)=>current?{...current,message:explanation.answer!.message}:current);setAiAssisted(explanation.answer.provider!=="deterministic");}}).catch(()=>{}).finally(()=>{if(activeIntervention.current===response.interventionId)setAiLoading(false);}); } else { setResult(evaluateCheckoutRisk(product, variant, fit)); setInterventionId(undefined); activeIntervention.current=undefined; } }
     finally { setEvaluating(false); }
   }
 
@@ -110,13 +116,36 @@ function ProductDetail({ product, persistent, onBack, onAdded, onAlternative }: 
     if (persistent && interventionId) await commerceApi.decide(interventionId, "accepted"); else recordMipoEvent({ productId: product.id, selectedVariantId: selected.id, recommendedVariantId: result.recommendedVariant.id, risk: result.risk, decision: "accepted" });
     setSelected(result.recommendedVariant);
     setDecision("accepted");
+    decisionRef.current="accepted";
   }
 
   async function keepOriginal() {
     if (!selected || !result) return;
     if (persistent && interventionId) await commerceApi.decide(interventionId, "kept_original"); else recordMipoEvent({ productId: product.id, selectedVariantId: selected.id, recommendedVariantId: result.recommendedVariant?.id, risk: result.risk, decision: "kept_original" });
     setDecision("kept_original");
+    decisionRef.current="kept_original";
   }
+
+  async function continueWithSelection() {
+    if (!selected || !result || decisionLoading) return;
+    setDecisionLoading(true);
+    try {
+      if (persistent && interventionId) await commerceApi.decide(interventionId, "kept_original");
+      else recordMipoEvent({ productId: product.id, selectedVariantId: selected.id, risk: result.risk, decision: "kept_original" });
+      setDecision("kept_original");
+      decisionRef.current="kept_original";
+      await onAdded(product, selected, "kept_original");
+    } finally { setDecisionLoading(false); }
+  }
+
+  function chooseAnotherSize() {
+    const alternative=product.variants.find((variant)=>variant.id!==selected?.id&&(variant.inventory_quantity??0)>0);
+    sizePickerRef.current?.scrollIntoView({behavior:"smooth",block:"center"});
+    if(alternative) window.setTimeout(()=>document.getElementById(`size-${alternative.id}`)?.focus(),250);
+  }
+
+  const stockNeedsDecision=Boolean(selected&&result?.risk==="stock"&&(selected.inventory_quantity??0)>0&&!decision);
+  const requiresDecision=Boolean(result&&result.risk!=="none"&&!decision&&(result.recommendedVariant||result.alternativeProductId||stockNeedsDecision));
 
   return (
     <main className="detail-page">
@@ -130,9 +159,9 @@ function ProductDetail({ product, persistent, onBack, onAdded, onAlternative }: 
           <p className="price">{money.format(product.variants[0].price / 100)}</p>
           <p className="description">{product.description}</p>
 
-          <fieldset className="size-picker">
+          <fieldset className="size-picker" ref={sizePickerRef}>
             <legend><span>Tamanho: <b>{selected?.size ?? "selecione"}</b></span><button type="button">Guia de medidas</button></legend>
-            <div>{product.variants.map((variant) => { const soldOut=(variant.inventory_quantity??0)===0; return <button type="button" className={selected?.id === variant.id ? "selected" : ""} onClick={() => choose(variant)} key={variant.id} aria-label={`${variant.size}${soldOut?", esgotado":""}`}>{variant.size}{soldOut&&<small>Esgotado</small>}</button>; })}</div>
+            <div>{product.variants.map((variant) => { const soldOut=(variant.inventory_quantity??0)===0; return <button id={`size-${variant.id}`} type="button" className={selected?.id === variant.id ? "selected" : ""} onClick={() => choose(variant)} key={variant.id} aria-label={`${variant.size}${soldOut?", esgotado":""}`}>{variant.size}{soldOut&&<small>Esgotado</small>}</button>; })}</div>
           </fieldset>
 
           <fieldset className="fit-picker"><legend>Como você prefere o caimento?</legend><div>{([["fitted","Mais ajustado"],["regular","Regular"],["loose","Mais solto"]] as const).map(([value,label]) => <button type="button" key={value} aria-pressed={fitPreference === value} className={fitPreference === value ? "selected" : ""} onClick={() => { setFitPreference(value); if (selected) void choose(selected, value); }}>{label}</button>)}</div><small>Preferência opcional usada apenas neste cenário demonstrativo.</small></fieldset>
@@ -142,20 +171,25 @@ function ProductDetail({ product, persistent, onBack, onAdded, onAlternative }: 
             <aside className={`mipo-card mipo-card--${result.risk}`} aria-live="polite">
               <div className="mipo-card__mark"><Icon name="spark" /></div>
               <div>
-                <p className="mipo-label">Escolha assistida · MIPO</p>
+                <p className="mipo-label">Escolha assistida · MIPO {aiAssisted&&<span>· Explicação assistida por IA</span>}</p>
                 <h2>{result.message}</h2>
                 <p>{result.evidence}</p>
+                {aiLoading&&<p className="mipo-ai-status" role="status">Aprimorando a explicação…</p>}
                 {(result.recommendedVariant || result.alternativeProductId) && !decision && <div className="mipo-actions">
-                  {result.recommendedVariant && <button onClick={acceptRecommendation}>Usar tamanho {result.recommendedVariant.size}</button>}
-                  {result.alternativeProductId && <button onClick={() => onAlternative(result.alternativeProductId!)}>Ver alternativa</button>}
-                  <button className="quiet" onClick={keepOriginal}>Manter minha escolha</button>
+                  {result.recommendedVariant && <button type="button" onClick={acceptRecommendation}>Usar tamanho {result.recommendedVariant.size}</button>}
+                  {result.alternativeProductId && <button type="button" onClick={() => onAlternative(result.alternativeProductId!)}>Ver alternativa</button>}
+                  <button type="button" className="quiet" onClick={keepOriginal}>Manter minha escolha</button>
+                </div>}
+                {stockNeedsDecision&&<div className="mipo-actions mipo-actions--stock">
+                  <button type="button" disabled={decisionLoading} onClick={continueWithSelection}>{decisionLoading?"Registrando escolha…":`Continuar com ${selected.size}`}</button>
+                  <button type="button" className="quiet" disabled={decisionLoading} onClick={chooseAnotherSize}>Escolher outro tamanho</button>
                 </div>}
                 {decision && <p className="decision-note">✓ Decisão registrada: {decision === "accepted" ? "recomendação aceita" : "escolha original mantida"}.</p>}
               </div>
             </aside>
           )}
 
-          <button className="primary-action" disabled={!selected || (selected.inventory_quantity??0)===0 || evaluating || (!!result && result.risk !== "none" && !decision && !!(result.recommendedVariant || result.alternativeProductId))} onClick={async () => { if (!selected) return; if (persistent && interventionId && !result?.recommendedVariant && !result?.alternativeProductId) await commerceApi.decide(interventionId, "not_required"); await onAdded(product, selected, decision); }}>
+          <button className="primary-action" disabled={!selected || (selected.inventory_quantity??0)===0 || evaluating || decisionLoading || requiresDecision} onClick={async () => { if (!selected) return; if (persistent && interventionId && !result?.recommendedVariant && !result?.alternativeProductId) await commerceApi.decide(interventionId, "not_required"); await onAdded(product, selected, decision); }}>
             <span>{selected&&(selected.inventory_quantity??0)===0?"Tamanho esgotado":"Adicionar à sacola"}</span><Icon name="arrow" />
           </button>
           <div className="detail-notes"><span>Frete grátis acima de R$ 500</span><span>Troca em até 30 dias</span></div>

@@ -14,7 +14,9 @@ O catálogo público usa somente produtos da categoria `Moda`. Tamanho, cor e de
 2. Abra **Top Delicado Preto** e selecione **P**. A taxa observada é 42,9%, mas há somente 7 vendas; o MIPO registra `insufficient_evidence` e não força uma recomendação.
 3. Abra **Camisa Social Delicado Prata** e selecione **P**. Sem risco sustentado, adicione-a à sacola; a decisão fica como `not_required`.
 4. Atualize `/painel` e apresente estados, evidências, regra e filtros.
-5. Destaque que o cenário potencial permanece bloqueado sem recomendação elegível.
+5. Observe a indicação **Explicação assistida por IA** quando o agente concluir com uma saída válida.
+6. Atualize o painel e mostre separadamente as execuções do EloAgents, fallback Groq, cache, rejeições e fallback determinístico.
+7. Destaque que o cenário potencial permanece bloqueado sem recomendação elegível.
 
 ## Limites que devem ser verbalizados
 
@@ -22,7 +24,8 @@ O catálogo público usa somente produtos da categoria `Moda`. Tamanho, cor e de
 - Estoque é um snapshot, não uma série histórica.
 - Tamanhos são enriquecimento sintético explícito sobre SKUs reais.
 - Pendências viram “Sem resposta” após 30 minutos apenas na leitura; nenhum evento é reescrito.
-- IA não participa da decisão nesta fase.
+- A IA escolhe somente uma estratégia de comunicação previamente autorizada. Risco, estoque, tamanho e elegibilidade continuam sendo calculados por tools determinísticas.
+- EloAgents é primário; Groq e, por fim, a mensagem determinística preservam a jornada em caso de falha.
 
 ## Reset seguro
 
