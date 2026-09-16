@@ -16,7 +16,8 @@ export async function getProduct(id: string) { return (await listProducts()).fin
 
 async function ensureCart(sessionId: string): Promise<DbCart> {
   if (dataSource() === "local") return { id: `local-${sessionId}`, currency_code: "brl" };
-  await supabaseRest("anonymous_sessions?on_conflict=id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=representation" }, body: JSON.stringify({ id: sessionId, expires_at: expiresAt(), last_seen_at: new Date().toISOString() }) });
+  await supabaseRest("anonymous_sessions?on_conflict=id", { method: "POST", headers: { Prefer: "resolution=ignore-duplicates,return=minimal" }, body: JSON.stringify({ id: sessionId, expires_at: expiresAt(), last_seen_at: new Date().toISOString(), is_demo: process.env.MIPO_DEMO_MODE === "true" }) });
+  await supabaseRest(`anonymous_sessions?id=eq.${sessionId}`, { method: "PATCH", body: JSON.stringify({ last_seen_at: new Date().toISOString() }) });
   const existing = await supabaseRest<DbCart[]>(`carts?session_id=eq.${sessionId}&select=id,currency_code&limit=1`);
   if (existing[0]) return existing[0];
   const [created] = await supabaseRest<DbCart[]>("carts", { method: "POST", body: JSON.stringify({ session_id: sessionId, expires_at: expiresAt() }) });

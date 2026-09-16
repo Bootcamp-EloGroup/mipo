@@ -55,7 +55,8 @@ function Header({ cartCount, onNavigate }: { cartCount: number; onNavigate: (vie
 
 function Catalog({ products, onProduct }: { products: Product[]; onProduct: (product: Product) => void }) {
   const [category, setCategory] = useState("Todos");
-  const visibleProducts = category === "Todos" ? products : products.filter((product) => product.category === category || (category === "Blusas" && product.category === "Terceira peça"));
+  const categories = ["Todos", ...new Set(products.map((product) => product.subcategory ?? product.category))];
+  const visibleProducts = category === "Todos" ? products : products.filter((product) => (product.subcategory ?? product.category) === category);
   return (
     <main id="conteudo">
       <section className="hero">
@@ -69,7 +70,7 @@ function Catalog({ products, onProduct }: { products: Product[]; onProduct: (pro
       </section>
 
       <section className="collection" id="colecao">
-        <div className="section-heading"><div><p className="eyebrow">Seleção Vértice</p><h2>Novidades da coleção</h2></div><div className="category-pills" aria-label="Filtrar por categoria">{["Todos", "Vestidos", "Blusas", "Calças"].map((item) => <button key={item} className={category === item ? "active" : ""} aria-pressed={category === item} onClick={() => setCategory(item)}>{item}</button>)}</div></div>
+        <div className="section-heading"><div><p className="eyebrow">Seleção Vértice</p><h2>Novidades da coleção</h2></div><div className="category-pills" aria-label="Filtrar por categoria">{categories.map((item) => <button key={item} className={category === item ? "active" : ""} aria-pressed={category === item} onClick={() => setCategory(item)}>{item}</button>)}</div></div>
         <div className="product-grid">
           {visibleProducts.map((product, index) => (
             <article className={`product-card reveal reveal--${index % 3}`} key={product.id}>

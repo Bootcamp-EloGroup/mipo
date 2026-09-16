@@ -83,5 +83,12 @@ Os atributos de tamanho e cor inexistentes nos CSVs são armazenados com origem 
 - `PATCH /api/cart/items/:id`, `DELETE /api/cart/items/:id`
 - `POST /api/mipo/evaluate`
 - `POST /api/mipo/decisions`
+- `GET /api/dashboard`
 
 Todas as tabelas têm RLS habilitada e não concedem acesso a `anon` ou `authenticated`. A aplicação acessa a Data API apenas pelas rotas do Next.js.
+
+## Painel e demonstração
+
+O painel agregado fica em `/painel`, sem identificadores completos de sessão ou dados pessoais. O catálogo diferencia explicitamente tipo de produto e significado da variante; a experiência atual seleciona somente itens de `Moda` para o fluxo de tamanho.
+
+Consulte [`docs/roteiro-demonstracao.md`](docs/roteiro-demonstracao.md). Para remover apenas sessões criadas explicitamente com `MIPO_DEMO_MODE=true`, execute `corepack pnpm data:reset-demo`; catálogo e histórico estão fora do escopo da função.

@@ -19,10 +19,13 @@ export type Product = Pick<
   "id" | "title" | "handle" | "subtitle" | "description"
 > & {
   category: string;
+  subcategory?: string;
   color: string;
   accent: string;
   badge?: string;
   imageKey?: "sand" | "charcoal";
+  productKind?: "apparel" | "beauty" | "accessory" | "lifestyle";
+  variantAttribute?: "size" | "shade" | "color" | "volume" | "none";
   variants: ProductVariant[];
   alternativeProductId?: string;
 };

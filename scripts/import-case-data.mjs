@@ -85,14 +85,17 @@ for (const { data } of inventory) {
   const group = groups.get(key) ?? { key, name: data.nome_produto, category: data.categoria, subcategory: data.subcategoria, rows: [], sales: 0 };
   group.rows.push(data); group.sales += salesBySku.get(data.sku_id)?.sales ?? 0; groups.set(key, group);
 }
-const curated = [...groups.values()].filter((group) => group.rows.length === 4).sort((a, b) => b.sales - a.sales).slice(0, 6);
-if (curated.length < 6) throw new Error("Não há 6 produtos com exatamente 4 SKUs para o enriquecimento P/M/G/GG.");
+const apparelCandidates = [...groups.values()].filter((group) => group.category === "Moda" && group.rows.length === 4).sort((a, b) => b.sales - a.sales);
+const topApparel = apparelCandidates.slice(0, 5);
+const stockScenario = apparelCandidates.find((group) => !topApparel.includes(group) && group.rows.some((row) => integer(row.estoque_disponivel) <= 3));
+const curated = stockScenario ? [...topApparel, stockScenario] : apparelCandidates.slice(0, 6);
+if (curated.length < 6) throw new Error("Não há 6 produtos de Moda com exatamente 4 SKUs para o enriquecimento P/M/G/GG.");
 const curatedKeys = new Set(curated.map((group) => group.key));
 const palette = [["#a4492e","#e6cbb2","sand"],["#263f49","#b9cac9","charcoal"],["#9b7a4d","#e8dac1","sand"],["#4e5841","#c9cdbd","sand"],["#936726","#e4c88c","charcoal"],["#633b45","#c8a2a8","charcoal"]];
 const sizes = ["P","M","G","GG"];
 const products = [...groups.values()].map((group, index) => {
   const productId = uuid(`product:${fileHash}:${group.key}`); const curatedIndex = curated.findIndex((item) => item.key === group.key); const colors = palette[Math.max(0, curatedIndex) % palette.length];
-  return { id: productId, source_key: group.key, title: group.name, handle: `${slugify(group.name)}-${productId.slice(0,6)}`, subtitle: `${group.subcategory} · seleção Vértice`, description: `Peça selecionada do catálogo fornecido para a experiência demonstrativa MIPO.`, category: group.category, subcategory: group.subcategory, color: colors[0], accent: colors[1], badge: curatedIndex === 0 ? "Mais desejado" : null, image_key: colors[2], is_curated: curatedKeys.has(group.key), origin: "derived" };
+  return { id: productId, source_key: group.key, title: group.name, handle: `${slugify(group.name)}-${productId.slice(0,6)}`, subtitle: `${group.subcategory} · seleção Vértice`, description: `Peça selecionada do catálogo fornecido para a experiência demonstrativa MIPO.`, category: group.category, subcategory: group.subcategory, product_kind: group.category === "Moda" ? "apparel" : group.category === "Beleza" ? "beauty" : group.category === "Acessórios" ? "accessory" : "lifestyle", variant_attribute: group.category === "Moda" ? "size" : "none", color: colors[0], accent: colors[1], badge: curatedIndex === 0 ? "Mais desejado" : null, image_key: colors[2], is_curated: curatedKeys.has(group.key), origin: "derived" };
 });
 const productByKey = new Map(products.map((product) => [product.source_key, product]));
 const variants = [];
