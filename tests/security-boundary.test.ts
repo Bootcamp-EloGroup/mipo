@@ -11,11 +11,16 @@ describe("fronteira de segurança do Supabase", () => {
     for (const file of clientFiles) {
       const source = readFileSync(file, "utf8");
       expect(source).not.toMatch(/SUPABASE_(SECRET_KEY|SERVICE_ROLE_KEY)/);
+      expect(source).not.toMatch(/(?:ELOAGENTS|GROQ)_API_KEY/);
     }
   });
 
   it("marca o cliente REST privilegiado como exclusivo do servidor", () => {
     const source = readFileSync("src/lib/supabase-rest.ts", "utf8");
     expect(source).toContain('import "server-only"');
+  });
+
+  it("mantém provedores e orquestrador ReAct exclusivos do servidor", () => {
+    for (const file of ["src/server/mipo-agent-provider.ts","src/server/mipo-react-agent.ts"]) expect(readFileSync(file,"utf8")).toContain('import "server-only"');
   });
 });

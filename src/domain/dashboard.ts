@@ -24,4 +24,5 @@ export type DashboardData = {
   trend: Array<{ date: string; interventions: number; accepted: number }>;
   rows: DashboardRow[];
   simulator: { locked: boolean; reason?: string };
+  agent: { total:number; eloagents:number; groq:number; deterministicFallback:number; rejected:number; cacheHits:number; averageLatencyMs:number|null };
 };
