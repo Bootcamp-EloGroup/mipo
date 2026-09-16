@@ -3,6 +3,7 @@ import { getOrCreateSessionId } from "@/src/lib/session";
 import { dataSource, supabaseRest } from "@/src/lib/supabase-rest";
 import { getProduct } from "@/src/server/store";
 import { runMipoAgent } from "@/src/server/mipo-react-agent";
+import { runPythonAgent } from "@/src/server/mipo-python-agent";
 import { evaluateCheckoutRisk, type FitPreference, type RiskResult } from "@/src/services/mipo";
 
 type Intervention = {id:string;session_id:string;product_id:string;selected_variant_id:string;recommended_variant_id:string|null;fit_preference:FitPreference|null;risk_type:RiskResult["risk"];risk_level:RiskResult["level"];evidence:{message?:string};message:string;rule_set_id:string};
@@ -21,7 +22,10 @@ export async function POST(request:Request){
     const thresholds={highReturnRate:rules[0].high_return_rate,minimumImprovement:rules[0].minimum_improvement,lowStockQuantity:rules[0].low_stock_quantity,minimumSampleSize:rules[0].minimum_sample_size};
     const result=evaluateCheckoutRisk(product,selected,intervention.fit_preference??"regular",thresholds);
     if(result.risk!==intervention.risk_type||result.level!==intervention.risk_level)return Response.json({error:"A evidência atual diverge da intervenção registrada."},{status:409});
-    const answer=await runMipoAgent({interventionId:intervention.id,product,selected,fitPreference:intervention.fit_preference??"regular",thresholds,deterministicResult:result});
+    const context={interventionId:intervention.id,product,selected,fitPreference:intervention.fit_preference??"regular",thresholds,deterministicResult:result};
+    let answer;
+    if(process.env.MIPO_AGENT_RUNTIME==="python")try{answer=await runPythonAgent(context);}catch{answer=await runMipoAgent(context);}
+    else answer=await runMipoAgent(context);
     return Response.json({enabled:true,answer});
   }catch(error){return apiError(error);}
 }

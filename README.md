@@ -100,4 +100,8 @@ Com `AI_EXPLANATIONS_ENABLED=true`, a avaliação determinística aparece imedia
 
 Configure somente no servidor: `ELOAGENTS_API_KEY`, `ELOAGENTS_MODEL` e `GROQ_API_KEY`. O agente não acessa livremente o banco ou a internet, não mantém memória do usuário e não pode alterar risco, variante, estoque ou elegibilidade calculados pelo motor MIPO. Execuções e passos são auditados sem prompt bruto ou raciocínio interno.
 
+### Runtime Python opcional
+
+O agente também pode rodar em FastAPI + LangGraph, mantendo o mesmo contrato da rota Next.js. Inicie com `cd agent_service && uv sync --dev && uv run uvicorn mipo_agent.main:app --reload`, configure `MIPO_AGENT_RUNTIME=python` e mantenha `MIPO_PYTHON_AGENT_URL=http://127.0.0.1:8000`. Se o módulo Python estiver indisponível, o adapter retorna ao runtime TypeScript durante a migração.
+
 O desenho técnico e seus limites estão em [`docs/arquitetura-agente-react.md`](docs/arquitetura-agente-react.md).
