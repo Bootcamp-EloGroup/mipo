@@ -16,6 +16,7 @@ describe("adaptador dos provedores do agente",()=>{
     const fetchMock=vi.fn().mockResolvedValue(new Response(JSON.stringify({choices:[{message:{content:'{"type":"tool_call"}'}}]}),{status:200}));vi.stubGlobal("fetch",fetchMock);
     const {callProvider}=await import("../src/server/mipo-agent-provider"); await callProvider("groq",[{role:"user",content:"teste"}],100);
     const body=JSON.parse(String(fetchMock.mock.calls[0][1].body)); expect(body.response_format.json_schema.strict).toBe(true); expect(body.response_format.json_schema.schema.additionalProperties).toBe(false);
+    expect(body.max_completion_tokens).toBe(512); expect(body.reasoning_effort).toBe("low");
   });
 
   it("interrompe uma chamada que ultrapassa o timeout",async()=>{

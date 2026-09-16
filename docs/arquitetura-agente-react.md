@@ -18,7 +18,7 @@ O loop aceita no máximo quatro passos. Repetição, mudança de ordem ou encerr
 
 ## Contrato dos provedores
 
-- EloAgents: endpoint OpenAI-compatible configurado por `ELOAGENTS_BASE_URL`; JSON mode mais validação local.
+- EloAgents: endpoint OpenAI-compatible configurado por `ELOAGENTS_BASE_URL`; JSON mode mais validação local. O identificador atual é `gemini-3-flash-preview`, sem prefixo de provedor.
 - Groq: Chat Completions com JSON Schema estrito e validação local adicional.
 - Nenhum SDK ou framework de agentes é necessário.
 
