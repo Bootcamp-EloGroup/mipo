@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { apiError } from "@/src/lib/api-response";
-import { getOrCreateSessionId, sessionCookie } from "@/src/lib/session";
+import { expiresAt, getOrCreateSessionId, sessionCookie } from "@/src/lib/session";
 import { dataSource, supabaseRest } from "@/src/lib/supabase-rest";
 import { getProduct } from "@/src/server/store";
 import { evaluateCheckoutRisk } from "@/src/services/mipo";
@@ -13,6 +13,8 @@ export async function POST(request: Request) {
     if (!product || !variant) return NextResponse.json({ error: "Produto ou variação não encontrado." }, { status: 404 });
     const session = await getOrCreateSessionId(); let interventionId = `local-${crypto.randomUUID()}`;
     if (dataSource() === "supabase") {
+      await supabaseRest("anonymous_sessions?on_conflict=id", { method:"POST", headers:{Prefer:"resolution=ignore-duplicates,return=minimal"}, body:JSON.stringify({id:session.id,expires_at:expiresAt(),last_seen_at:new Date().toISOString(),is_demo:process.env.MIPO_DEMO_MODE==="true"}) });
+      await supabaseRest(`anonymous_sessions?id=eq.${session.id}`, {method:"PATCH",body:JSON.stringify({last_seen_at:new Date().toISOString()})});
       const rules = await supabaseRest<Array<{id:string;version:string;high_return_rate:number;minimum_improvement:number;low_stock_quantity:number;minimum_sample_size:number}>>("mipo_rule_sets?is_active=eq.true&select=*&limit=1");
       if (!rules[0]) throw new Error("Nenhum conjunto de regras MIPO ativo.");
       const result = evaluateCheckoutRisk(product, variant, fitPreference ?? "regular", { highReturnRate: rules[0].high_return_rate, minimumImprovement: rules[0].minimum_improvement, lowStockQuantity: rules[0].low_stock_quantity, minimumSampleSize: rules[0].minimum_sample_size });

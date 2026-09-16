@@ -23,4 +23,10 @@ describe("fronteira de segurança do Supabase", () => {
   it("mantém provedores e orquestrador ReAct exclusivos do servidor", () => {
     for (const file of ["src/server/mipo-agent-provider.ts","src/server/mipo-react-agent.ts"]) expect(readFileSync(file,"utf8")).toContain('import "server-only"');
   });
+
+  it("garante a sessão antes de persistir uma intervenção", () => {
+    const source=readFileSync("app/api/mipo/evaluate/route.ts","utf8");
+    expect(source.indexOf('anonymous_sessions?on_conflict=id')).toBeGreaterThan(-1);
+    expect(source.indexOf('anonymous_sessions?on_conflict=id')).toBeLessThan(source.indexOf('"mipo_interventions"'));
+  });
 });
