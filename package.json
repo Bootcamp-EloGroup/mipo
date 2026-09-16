@@ -7,7 +7,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "data:import": "node scripts/import-case-data.mjs",
+    "data:reset-demo": "node scripts/reset-demo-data.mjs",
+    "supabase:push": "npx supabase db push",
+    "supabase:push:dry": "npx supabase db push --dry-run"
   },
   "dependencies": {
     "@medusajs/types": "2.21.0",

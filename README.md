@@ -33,3 +33,62 @@ As bases CSV não estão incluídas porque contêm identificadores e textos em n
 - [`docs/roadmap.md`](docs/roadmap.md) — roadmap técnico em ordem de dependências.
 - [`docs/mvp.md`](docs/mvp.md) — definição funcional e técnica do MVP.
 
+## E-commerce e Supabase
+
+O storefront Vértice funciona em dois modos explícitos:
+
+- `DATA_SOURCE=local`: fixtures públicas para desenvolvimento visual.
+- `DATA_SOURCE=supabase`: catálogo, estoque, carrinho anônimo e decisões MIPO persistidos no projeto remoto.
+
+Não existe fallback silencioso entre os modos. O checkout permanece exclusivamente visual e não cria pedido ou cobrança.
+
+### Configuração do zero
+
+```bash
+corepack pnpm install
+./scripts/setup-supabase.sh
+corepack pnpm dev
+```
+
+O assistente cria `.env.local`, orienta a criação do `mipo-dev`, executa o dry-run das migrations e pede confirmação antes de qualquer escrita. Credenciais secretas não devem ser enviadas pelo chat ou commitadas.
+
+Para configuração manual, copie `.env.example` para `.env.local`, use uma Secret key somente no servidor e execute:
+
+```bash
+npx supabase login
+npx supabase link --project-ref SEU_PROJECT_REF
+npx supabase db push --dry-run
+npx supabase db push
+```
+
+### Ingestão do case
+
+O comando é dry-run por padrão:
+
+```bash
+corepack pnpm data:import -- \
+  --sales /caminho/vendas.csv \
+  --inventory /caminho/estoque.csv
+```
+
+Depois de revisar o resumo, grave no Supabase com `--apply`. O importador calcula SHA-256 dos dois arquivos, rejeita conteúdo repetido, coloca linhas inválidas em quarentena e só torna uma execução utilizável quando ela chega ao estado `completed`.
+
+Os atributos de tamanho e cor inexistentes nos CSVs são armazenados com origem `synthetic`. Estoque é registrado como snapshot com data derivada da importação, nunca como série histórica.
+
+### API server-side
+
+- `GET /api/products` e `GET /api/products/:id`
+- `GET /api/cart`, `DELETE /api/cart`
+- `POST /api/cart/items`
+- `PATCH /api/cart/items/:id`, `DELETE /api/cart/items/:id`
+- `POST /api/mipo/evaluate`
+- `POST /api/mipo/decisions`
+- `GET /api/dashboard`
+
+Todas as tabelas têm RLS habilitada e não concedem acesso a `anon` ou `authenticated`. A aplicação acessa a Data API apenas pelas rotas do Next.js.
+
+## Painel e demonstração
+
+O painel agregado fica em `/painel`, sem identificadores completos de sessão ou dados pessoais. O catálogo diferencia explicitamente tipo de produto e significado da variante; a experiência atual seleciona somente itens de `Moda` para o fluxo de tamanho.
+
+Consulte [`docs/roteiro-demonstracao.md`](docs/roteiro-demonstracao.md). Para remover apenas sessões criadas explicitamente com `MIPO_DEMO_MODE=true`, execute `corepack pnpm data:reset-demo`; catálogo e histórico estão fora do escopo da função.

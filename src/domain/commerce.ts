@@ -10,6 +10,8 @@ export type ProductVariant = Pick<
   price: number;
   returnRate: number;
   defectRate: number;
+  salesCount?: number;
+  evidenceOrigin?: "provided" | "derived" | "synthetic";
 };
 
 export type Product = Pick<
@@ -17,9 +19,13 @@ export type Product = Pick<
   "id" | "title" | "handle" | "subtitle" | "description"
 > & {
   category: string;
+  subcategory?: string;
   color: string;
   accent: string;
   badge?: string;
+  imageKey?: "sand" | "charcoal";
+  productKind?: "apparel" | "beauty" | "accessory" | "lifestyle";
+  variantAttribute?: "size" | "shade" | "color" | "volume" | "none";
   variants: ProductVariant[];
   alternativeProductId?: string;
 };
@@ -56,6 +62,6 @@ export type MipoEvent = {
   productId: string;
   selectedVariantId: string;
   recommendedVariantId?: string;
-  risk: "size" | "quality" | "stock" | "none";
+  risk: "size" | "quality" | "stock" | "none" | "insufficient_evidence";
   decision: "accepted" | "kept_original" | "not_required";
 };

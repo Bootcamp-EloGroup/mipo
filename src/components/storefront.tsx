@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import { products } from "@/src/data/products";
-import type { Cart, MipoEvent, Product, ProductVariant } from "@/src/domain/commerce";
+import { products as localProducts } from "@/src/data/products";
+import type { Cart, Product, ProductVariant } from "@/src/domain/commerce";
 import { localCommerceRepository, recordMipoEvent } from "@/src/services/local-commerce";
-import { evaluateCheckoutRisk } from "@/src/services/mipo";
+import { commerceApi } from "@/src/services/commerce-api";
+import { evaluateCheckoutRisk, type RiskResult } from "@/src/services/mipo";
 
 type View = "catalog" | "product" | "cart" | "checkout" | "success";
 
@@ -25,7 +26,7 @@ function Icon({ name }: { name: "bag" | "arrow" | "spark" | "close" | "minus" | 
 }
 
 function ProductArt({ product, hero = false }: { product: Product; hero?: boolean }) {
-  const isWarm = ["prod_aurora", "prod_trama", "prod_eixo"].includes(product.id);
+  const isWarm = product.imageKey === "sand" || ["prod_aurora", "prod_trama", "prod_eixo"].includes(product.id);
   const image = isWarm ? "/images/vertice-sand.webp" : "/images/vertice-charcoal.webp";
   return (
     <div className={`product-art ${hero ? "product-art--hero" : ""}`} style={{ "--tone": product.color } as React.CSSProperties}>
@@ -52,9 +53,10 @@ function Header({ cartCount, onNavigate }: { cartCount: number; onNavigate: (vie
   );
 }
 
-function Catalog({ onProduct }: { onProduct: (product: Product) => void }) {
+function Catalog({ products, onProduct }: { products: Product[]; onProduct: (product: Product) => void }) {
   const [category, setCategory] = useState("Todos");
-  const visibleProducts = category === "Todos" ? products : products.filter((product) => product.category === category || (category === "Blusas" && product.category === "Terceira peça"));
+  const categories = ["Todos", ...new Set(products.map((product) => product.subcategory ?? product.category))];
+  const visibleProducts = category === "Todos" ? products : products.filter((product) => (product.subcategory ?? product.category) === category);
   return (
     <main id="conteudo">
       <section className="hero">
@@ -68,7 +70,7 @@ function Catalog({ onProduct }: { onProduct: (product: Product) => void }) {
       </section>
 
       <section className="collection" id="colecao">
-        <div className="section-heading"><div><p className="eyebrow">Seleção Vértice</p><h2>Novidades da coleção</h2></div><div className="category-pills" aria-label="Filtrar por categoria">{["Todos", "Vestidos", "Blusas", "Calças"].map((item) => <button key={item} className={category === item ? "active" : ""} aria-pressed={category === item} onClick={() => setCategory(item)}>{item}</button>)}</div></div>
+        <div className="section-heading"><div><p className="eyebrow">Seleção Vértice</p><h2>Novidades da coleção</h2></div><div className="category-pills" aria-label="Filtrar por categoria">{categories.map((item) => <button key={item} className={category === item ? "active" : ""} aria-pressed={category === item} onClick={() => setCategory(item)}>{item}</button>)}</div></div>
         <div className="product-grid">
           {visibleProducts.map((product, index) => (
             <article className={`product-card reveal reveal--${index % 3}`} key={product.id}>
@@ -89,26 +91,30 @@ function Catalog({ onProduct }: { onProduct: (product: Product) => void }) {
   );
 }
 
-function ProductDetail({ product, onBack, onAdded, onAlternative }: { product: Product; onBack: () => void; onAdded: (product: Product, variant: ProductVariant, decision?: "accepted" | "kept_original") => void; onAlternative: (id: string) => void }) {
+function ProductDetail({ product, persistent, onBack, onAdded, onAlternative }: { product: Product; persistent: boolean; onBack: () => void; onAdded: (product: Product, variant: ProductVariant, decision?: "accepted" | "kept_original") => void | Promise<void>; onAlternative: (id: string) => void }) {
   const [selected, setSelected] = useState<ProductVariant | null>(null);
   const [decision, setDecision] = useState<"accepted" | "kept_original" | undefined>();
-  const result = selected ? evaluateCheckoutRisk(product, selected) : null;
+  const [result, setResult] = useState<RiskResult | null>(null);
+  const [interventionId, setInterventionId] = useState<string>();
+  const [fitPreference, setFitPreference] = useState<"fitted" | "regular" | "loose">("regular");
+  const [evaluating, setEvaluating] = useState(false);
 
-  function choose(variant: ProductVariant) {
-    setSelected(variant);
-    setDecision(undefined);
+  async function choose(variant: ProductVariant, fit = fitPreference) {
+    setSelected(variant); setDecision(undefined); setEvaluating(true);
+    try { if (persistent) { const response = await commerceApi.evaluate(product.id, variant.id, fit); setResult(response.result as RiskResult); setInterventionId(response.interventionId); } else { setResult(evaluateCheckoutRisk(product, variant, fit)); setInterventionId(undefined); } }
+    finally { setEvaluating(false); }
   }
 
-  function acceptRecommendation() {
+  async function acceptRecommendation() {
     if (!selected || !result?.recommendedVariant) return;
-    recordMipoEvent({ productId: product.id, selectedVariantId: selected.id, recommendedVariantId: result.recommendedVariant.id, risk: result.risk, decision: "accepted" });
+    if (persistent && interventionId) await commerceApi.decide(interventionId, "accepted"); else recordMipoEvent({ productId: product.id, selectedVariantId: selected.id, recommendedVariantId: result.recommendedVariant.id, risk: result.risk, decision: "accepted" });
     setSelected(result.recommendedVariant);
     setDecision("accepted");
   }
 
-  function keepOriginal() {
+  async function keepOriginal() {
     if (!selected || !result) return;
-    recordMipoEvent({ productId: product.id, selectedVariantId: selected.id, recommendedVariantId: result.recommendedVariant?.id, risk: result.risk, decision: "kept_original" });
+    if (persistent && interventionId) await commerceApi.decide(interventionId, "kept_original"); else recordMipoEvent({ productId: product.id, selectedVariantId: selected.id, recommendedVariantId: result.recommendedVariant?.id, risk: result.risk, decision: "kept_original" });
     setDecision("kept_original");
   }
 
@@ -126,17 +132,20 @@ function ProductDetail({ product, onBack, onAdded, onAlternative }: { product: P
 
           <fieldset className="size-picker">
             <legend><span>Tamanho: <b>{selected?.size ?? "selecione"}</b></span><button type="button">Guia de medidas</button></legend>
-            <div>{product.variants.map((variant) => <button type="button" className={selected?.id === variant.id ? "selected" : ""} onClick={() => choose(variant)} key={variant.id}>{variant.size}</button>)}</div>
+            <div>{product.variants.map((variant) => { const soldOut=(variant.inventory_quantity??0)===0; return <button type="button" className={selected?.id === variant.id ? "selected" : ""} onClick={() => choose(variant)} key={variant.id} aria-label={`${variant.size}${soldOut?", esgotado":""}`}>{variant.size}{soldOut&&<small>Esgotado</small>}</button>; })}</div>
           </fieldset>
 
-          {selected && result && (
+          <fieldset className="fit-picker"><legend>Como você prefere o caimento?</legend><div>{([["fitted","Mais ajustado"],["regular","Regular"],["loose","Mais solto"]] as const).map(([value,label]) => <button type="button" key={value} aria-pressed={fitPreference === value} className={fitPreference === value ? "selected" : ""} onClick={() => { setFitPreference(value); if (selected) void choose(selected, value); }}>{label}</button>)}</div><small>Preferência opcional usada apenas neste cenário demonstrativo.</small></fieldset>
+
+          {evaluating && <p className="mipo-loading" role="status">Analisando sua escolha…</p>}
+          {selected && result && !evaluating && (
             <aside className={`mipo-card mipo-card--${result.risk}`} aria-live="polite">
               <div className="mipo-card__mark"><Icon name="spark" /></div>
               <div>
                 <p className="mipo-label">Escolha assistida · MIPO</p>
                 <h2>{result.message}</h2>
                 <p>{result.evidence}</p>
-                {result.risk !== "none" && !decision && <div className="mipo-actions">
+                {(result.recommendedVariant || result.alternativeProductId) && !decision && <div className="mipo-actions">
                   {result.recommendedVariant && <button onClick={acceptRecommendation}>Usar tamanho {result.recommendedVariant.size}</button>}
                   {result.alternativeProductId && <button onClick={() => onAlternative(result.alternativeProductId!)}>Ver alternativa</button>}
                   <button className="quiet" onClick={keepOriginal}>Manter minha escolha</button>
@@ -146,8 +155,8 @@ function ProductDetail({ product, onBack, onAdded, onAlternative }: { product: P
             </aside>
           )}
 
-          <button className="primary-action" disabled={!selected || (!!result && result.risk !== "none" && !decision && !!(result.recommendedVariant || result.alternativeProductId))} onClick={() => selected && onAdded(product, selected, decision)}>
-            <span>Adicionar à sacola</span><Icon name="arrow" />
+          <button className="primary-action" disabled={!selected || (selected.inventory_quantity??0)===0 || evaluating || (!!result && result.risk !== "none" && !decision && !!(result.recommendedVariant || result.alternativeProductId))} onClick={async () => { if (!selected) return; if (persistent && interventionId && !result?.recommendedVariant && !result?.alternativeProductId) await commerceApi.decide(interventionId, "not_required"); await onAdded(product, selected, decision); }}>
+            <span>{selected&&(selected.inventory_quantity??0)===0?"Tamanho esgotado":"Adicionar à sacola"}</span><Icon name="arrow" />
           </button>
           <div className="detail-notes"><span>Frete grátis acima de R$ 500</span><span>Troca em até 30 dias</span></div>
         </section>
@@ -156,7 +165,7 @@ function ProductDetail({ product, onBack, onAdded, onAlternative }: { product: P
   );
 }
 
-function CartView({ cart, onChange, onCheckout, onCatalog }: { cart: Cart; onChange: (cart: Cart) => void; onCheckout: () => void; onCatalog: () => void }) {
+function CartView({ cart, onQuantity, onRemove, onCheckout, onCatalog }: { cart: Cart; onQuantity: (id:string, quantity:number) => void; onRemove: (id:string) => void; onCheckout: () => void; onCatalog: () => void }) {
   const total = cart.items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
   return <main className="cart-page">
     <div className="page-kicker"><p className="eyebrow">Sua seleção</p><h1>Sacola</h1><span>{cart.items.reduce((sum, item) => sum + item.quantity, 0)} itens</span></div>
@@ -164,9 +173,9 @@ function CartView({ cart, onChange, onCheckout, onCatalog }: { cart: Cart; onCha
       <section className="cart-lines">{cart.items.map((item) => <article className="cart-line" key={item.id}>
         <div className="cart-swatch" style={{ background: item.color }} />
         <div className="cart-line__copy"><p className="eyebrow">Vértice · edição 06</p><h2>{item.title}</h2><p>Tamanho {item.size}</p>{item.mipoDecision && <small><Icon name="spark" /> {item.mipoDecision === "accepted" ? "Tamanho escolhido com assistência MIPO" : "Escolha pessoal mantida"}</small>}</div>
-        <div className="quantity"><button aria-label="Diminuir quantidade" onClick={() => onChange(localCommerceRepository.updateLineItem(item.id, item.quantity - 1))}><Icon name="minus" /></button><span>{item.quantity}</span><button aria-label="Aumentar quantidade" onClick={() => onChange(localCommerceRepository.updateLineItem(item.id, item.quantity + 1))}><Icon name="plus" /></button></div>
+        <div className="quantity"><button aria-label="Diminuir quantidade" onClick={() => onQuantity(item.id, item.quantity - 1)}><Icon name="minus" /></button><span>{item.quantity}</span><button aria-label="Aumentar quantidade" onClick={() => onQuantity(item.id, item.quantity + 1)}><Icon name="plus" /></button></div>
         <strong>{money.format(item.unitPrice * item.quantity / 100)}</strong>
-        <button className="remove" aria-label={`Remover ${item.title}`} onClick={() => onChange(localCommerceRepository.removeLineItem(item.id))}><Icon name="close" /></button>
+        <button className="remove" aria-label={`Remover ${item.title}`} onClick={() => onRemove(item.id)}><Icon name="close" /></button>
       </article>)}</section>
       <aside className="summary"><p className="eyebrow">Resumo</p><div><span>Subtotal</span><strong>{money.format(total / 100)}</strong></div><div><span>Entrega</span><span>Calculada no checkout</span></div><hr/><div className="summary__total"><span>Total parcial</span><strong>{money.format(total / 100)}</strong></div><button className="primary-action" onClick={onCheckout}>Continuar para checkout <Icon name="arrow" /></button><p className="demo-note">Demonstração UX/UI. Nenhuma compra ou cobrança será realizada.</p></aside>
     </div>}
@@ -191,31 +200,38 @@ function Checkout({ cart, onFinish, onBack }: { cart: Cart; onFinish: () => void
 }
 
 export function Storefront() {
+  const persistent = process.env.NEXT_PUBLIC_DATA_SOURCE === "supabase";
   const [view, setView] = useState<View>("catalog");
-  const [activeProduct, setActiveProduct] = useState<Product>(products[0]);
+  const [products, setProducts] = useState<Product[]>(localProducts);
+  const [activeProduct, setActiveProduct] = useState<Product>(localProducts[0]);
   const [cart, setCart] = useState<Cart>({ id: "cart_demo", region: { id: "reg_br", name: "Brasil", currency_code: "brl" }, items: [] });
   const [toast, setToast] = useState("");
+  const [serviceError, setServiceError] = useState("");
 
-  useEffect(() => setCart(localCommerceRepository.getCart()), []);
+  useEffect(() => { if (!persistent) { setCart(localCommerceRepository.getCart()); return; } Promise.all([commerceApi.products(), commerceApi.cart()]).then(([catalog, savedCart]) => { setProducts(catalog); setCart(savedCart); if (catalog[0]) setActiveProduct(catalog[0]); }).catch((error) => setServiceError(error.message)); }, [persistent]);
   useEffect(() => { window.scrollTo({ top: 0, behavior: "smooth" }); }, [view, activeProduct]);
   const cartCount = useMemo(() => cart.items.reduce((sum, item) => sum + item.quantity, 0), [cart]);
 
   function openProduct(product: Product) { setActiveProduct(product); setView("product"); }
-  function add(product: Product, variant: ProductVariant, decision?: "accepted" | "kept_original") {
-    const next = localCommerceRepository.addLineItem({ productId: product.id, variantId: variant.id, title: product.title, size: variant.size, quantity: 1, unitPrice: variant.price, color: product.color, mipoDecision: decision });
+  async function add(product: Product, variant: ProductVariant, decision?: "accepted" | "kept_original") {
+    const next = persistent ? await commerceApi.addItem(variant.id, 1, decision) : localCommerceRepository.addLineItem({ productId: product.id, variantId: variant.id, title: product.title, size: variant.size, quantity: 1, unitPrice: variant.price, color: product.color, mipoDecision: decision });
     if (!decision) recordMipoEvent({ productId: product.id, selectedVariantId: variant.id, risk: evaluateCheckoutRisk(product, variant).risk, decision: "not_required" });
     setCart(next); setToast(`${product.title} foi para sua sacola.`); setTimeout(() => setToast(""), 2800); setView("cart");
   }
+  async function changeQuantity(id:string, quantity:number) { setCart(persistent ? await commerceApi.updateItem(id, Math.max(1, quantity)) : localCommerceRepository.updateLineItem(id, quantity)); }
+  async function removeItem(id:string) { setCart(persistent ? await commerceApi.removeItem(id) : localCommerceRepository.removeLineItem(id)); }
+  async function finishDemo() { setCart(persistent ? await commerceApi.clearCart() : localCommerceRepository.clearCart()); setView("success"); }
 
   return <div className="storefront">
     <div className="demo-banner">Experiência demonstrativa · nenhum dado ou pagamento é processado</div>
     <Header cartCount={cartCount} onNavigate={setView} />
-    {view === "catalog" && <Catalog onProduct={openProduct} />}
-    {view === "product" && <ProductDetail product={activeProduct} onBack={() => setView("catalog")} onAdded={add} onAlternative={(id) => { const found = products.find(p => p.id === id); if (found) openProduct(found); }} />}
-    {view === "cart" && <CartView cart={cart} onChange={setCart} onCheckout={() => setView("checkout")} onCatalog={() => setView("catalog")} />}
-    {view === "checkout" && <Checkout cart={cart} onBack={() => setView("cart")} onFinish={() => { setCart(localCommerceRepository.clearCart()); setView("success"); }} />}
+    {serviceError && <main className="service-error"><h1>Dados temporariamente indisponíveis</h1><p>{serviceError}</p><p>Verifique a configuração do Supabase. O modo local não é ativado silenciosamente.</p></main>}
+    {!serviceError && view === "catalog" && <Catalog products={products} onProduct={openProduct} />}
+    {!serviceError && view === "product" && <ProductDetail product={activeProduct} persistent={persistent} onBack={() => setView("catalog")} onAdded={add} onAlternative={(id) => { const found = products.find(p => p.id === id); if (found) openProduct(found); }} />}
+    {!serviceError && view === "cart" && <CartView cart={cart} onQuantity={(id,quantity) => void changeQuantity(id,quantity)} onRemove={(id) => void removeItem(id)} onCheckout={() => setView("checkout")} onCatalog={() => setView("catalog")} />}
+    {!serviceError && view === "checkout" && <Checkout cart={cart} onBack={() => setView("cart")} onFinish={() => void finishDemo()} />}
     {view === "success" && <main className="success-page"><p className="eyebrow">Demonstração concluída</p><span className="success-mark">✓</span><h1>Escolha registrada.<br/><em>Nenhuma compra foi realizada.</em></h1><p>O fluxo visual terminou aqui. Em uma integração real, o pedido seria criado pelo backend Medusa.</p><button className="primary-action" onClick={() => setView("catalog")}>Voltar à coleção <Icon name="arrow" /></button></main>}
     {toast && <div className="toast" role="status">{toast}</div>}
-    <footer><div className="wordmark">VÉRTICE<span>atelier cotidiano</span></div><p>Uma demonstração de escolha assistida pelo MIPO.</p><p>© 2026 · Case EloGroup</p></footer>
+    <footer><div className="wordmark">VÉRTICE<span>atelier cotidiano</span></div><p>Uma demonstração de escolha assistida pelo MIPO. <a href="/painel">Painel MIPO →</a></p><p>© 2026 · Case EloGroup</p></footer>
   </div>;
 }

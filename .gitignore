@@ -9,3 +9,7 @@ __pycache__/
 .next/
 node_modules/
 *.tsbuildinfo
+.env
+.env.local
+.env.*.local
+supabase/.temp/

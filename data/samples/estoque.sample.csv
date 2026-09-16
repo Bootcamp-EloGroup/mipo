@@ -1,0 +1,5 @@
+sku_id,nome_produto,categoria,subcategoria,preco_venda_sugerido,estoque_fisico,estoque_reservado,estoque_disponivel,status_disponibilidade
+SKU-DEMO-001,Camisa Horizonte,Moda,Camisas,299.90,12,2,10,Em Estoque
+SKU-DEMO-002,Camisa Horizonte,Moda,Camisas,299.90,6,1,5,Em Estoque
+SKU-DEMO-003,Camisa Horizonte,Moda,Camisas,299.90,4,1,3,Crítico
+SKU-DEMO-004,Camisa Horizonte,Moda,Camisas,299.90,2,0,2,Crítico
