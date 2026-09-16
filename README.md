@@ -107,3 +107,17 @@ O agente roda em FastAPI + LangGraph e mantém um contrato estreito com a rota N
 O desenho técnico e seus limites estão em [`docs/arquitetura-agente-react.md`](docs/arquitetura-agente-react.md).
 
 O próximo incremento planejado — corpus de avaliação, gates de segurança, métricas operacionais e hardening do runtime — está especificado em [`docs/specs/avaliacao-e-prontidao-agente.md`](docs/specs/avaliacao-e-prontidao-agente.md).
+
+### Avaliação do agente
+
+O gate padrão é totalmente offline e não requer credenciais:
+
+```bash
+cd services/agent
+uv sync --dev
+uv run mipo-eval run --adapter offline
+```
+
+Ele executa 22 cenários sintéticos e grava relatórios ignorados pelo Git em `services/agent/evals/results/`. O adapter HTTP valida o processo FastAPI completo. O modo `live` só executa com `--confirm-external-calls`; um smoke externo não substitui os gates determinísticos nem comprova impacto de negócio.
+
+Os últimos resultados sanitizados estão em [`docs/evidencias-avaliacao-agente.md`](docs/evidencias-avaliacao-agente.md).

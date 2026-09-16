@@ -1,6 +1,6 @@
 # Spec — Avaliação e prontidão operacional do agente MIPO
 
-**Status:** proposta pronta para implementação
+**Status:** implementada na branch `codex/spec-avaliacao-agente`
 
 **Branch base:** `develop`
 
@@ -264,19 +264,19 @@ Regras:
 
 ## 12. Critérios de aceite
 
-- [ ] Corpus contém ao menos 22 casos e todos têm origem sintética explícita.
-- [ ] Todos os gates determinísticos passam em 100% dos casos offline.
-- [ ] Nenhum teste offline acessa rede.
-- [ ] EloAgents → Groq → determinístico é exercitado com adapters falsos.
-- [ ] `insufficient_evidence` nunca produz recomendação.
-- [ ] Casos adversariais não alteram política, sequência ou evidência.
-- [ ] Relatórios são reproduzíveis e não contêm segredo, PII ou prompt bruto.
-- [ ] `/ready` e autenticação opcional do runtime estão testados.
-- [ ] Repetir uma intervenção concluída não chama provider novamente.
-- [ ] Duração de cada passo auditado é observada, não preenchida artificialmente.
-- [ ] `uv run pytest` e `uv run mipo-eval run --adapter offline` passam.
-- [ ] Testes e build do Next.js continuam verdes.
-- [ ] Documentação diferencia teste offline, smoke externo e evidência de impacto.
+- [x] Corpus contém ao menos 22 casos e todos têm origem sintética explícita.
+- [x] Todos os gates determinísticos passam em 100% dos casos offline.
+- [x] Nenhum teste offline acessa rede.
+- [x] EloAgents → Groq → determinístico é exercitado com adapters falsos.
+- [x] `insufficient_evidence` nunca produz recomendação.
+- [x] Casos adversariais não alteram política, sequência ou evidência.
+- [x] Relatórios são reproduzíveis e não contêm segredo, PII ou prompt bruto.
+- [x] `/ready` e autenticação opcional do runtime estão testados.
+- [x] Repetir uma intervenção concluída não chama provider novamente.
+- [x] Duração de cada passo auditado é observada, não preenchida artificialmente.
+- [x] `uv run pytest` e `uv run mipo-eval run --adapter offline` passam.
+- [x] Testes e build do Next.js continuam verdes.
+- [x] Documentação diferencia teste offline, smoke externo e evidência de impacto.
 
 ## 13. Ordem de implementação
 

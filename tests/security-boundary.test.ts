@@ -12,6 +12,7 @@ describe("fronteira de segurança do Supabase", () => {
       const source = readFileSync(file, "utf8");
       expect(source).not.toMatch(/SUPABASE_(SECRET_KEY|SERVICE_ROLE_KEY)/);
       expect(source).not.toMatch(/(?:ELOAGENTS|GROQ)_API_KEY/);
+      expect(source).not.toMatch(/MIPO_PYTHON_AGENT_TOKEN/);
     }
   });
 
