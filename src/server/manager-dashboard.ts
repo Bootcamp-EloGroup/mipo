@@ -22,12 +22,19 @@ export function normalizeDashboardData(payload: Wire): ManagerDashboardData {
   const f = (payload.filters ?? {}) as Wire;
   const w = (payload.historicalWindow ?? {}) as Wire;
   const o = (payload.options ?? {}) as Wire;
+  const marketing = (payload.marketing ?? {}) as Wire;
   return {
     generatedAt: String(payload.generatedAt ?? fallback.generatedAt),
     filters: { from: f.from ? String(f.from) : null, to: f.to ? String(f.to) : null, channel: f.channel ? String(f.channel) : null, category: f.category ? String(f.category) : null, origin: f.origin === "demo" || f.origin === "historical" ? f.origin : "all" },
     historicalWindow: { from: w.from ? String(w.from) : null, to: w.to ? String(w.to) : null },
     options: { channels: rows(o.channels, (r) => ({ value: String(r.value) })), categories: rows(o.categories, (r) => ({ value: String(r.value) })) },
     scenarioBasis: fallback.scenarioBasis,
+    marketing: {
+      source: "historical", campaigns: num(marketing.campaigns), spendCents: num(marketing.spendCents ?? marketing.spend_cents), impressions: num(marketing.impressions), clicks: num(marketing.clicks), conversions: num(marketing.conversions), revenueCents: num(marketing.revenueCents ?? marketing.revenue_cents),
+      byChannel: rows(marketing.byChannel, (r) => ({ label: String(r.channel ?? r.label), campaigns: num(r.campaigns), spendCents: num(r.spend_cents), conversions: num(r.conversions), revenueCents: num(r.revenue_cents), impressions: num(r.impressions), clicks: num(r.clicks) })),
+      byCategory: rows(marketing.byCategory, (r) => ({ label: String(r.category ?? r.label), campaigns: num(r.campaigns), spendCents: num(r.spend_cents), conversions: num(r.conversions), revenueCents: num(r.revenue_cents) })),
+      byAttribution: rows(marketing.byAttribution, (r) => ({ label: String(r.attribution ?? r.label), campaigns: num(r.campaigns), spendCents: num(r.spend_cents), conversions: num(r.conversions), revenueCents: num(r.revenue_cents) })),
+    },
     executive: {
       source: "historical", revenueCents: num(e.revenueCents ?? e.revenue_cents), marginCents: num(e.marginCents ?? e.margin_cents), orders: num(e.orders), returns: num(e.returns), criticalSkus: num(e.criticalSkus ?? e.critical_skus), inventoryExposureCents: num(e.inventoryExposureCents ?? e.inventory_exposure_cents),
       monthly: rows(e.monthly, (r) => ({ month: String(r.month), revenueCents: num(r.revenue_cents), marginCents: num(r.margin_cents), orders: num(r.orders), returns: num(r.returns) })),
@@ -52,11 +59,13 @@ export function normalizeDashboardData(payload: Wire): ManagerDashboardData {
 
 export async function getManagerDashboardData(filters: DashboardFilters): Promise<ManagerDashboardData> {
   if (dataSource() !== "supabase") return { ...emptyManagerDashboard(), filters };
-  const [payload, inventory] = await Promise.all([
+  const [payload, inventory, marketing] = await Promise.all([
     supabaseRest<Wire>("rpc/get_manager_dashboard", { method: "POST", body: JSON.stringify({ p_from: filters.from, p_to: filters.to, p_channel: filters.channel, p_category: filters.category, p_origin: filters.origin }) }),
     supabaseRest<Wire>("rpc/get_manager_inventory_kpis", { method: "POST", body: JSON.stringify({ p_category: filters.category }) }),
+    supabaseRest<Wire>("rpc/get_manager_marketing_kpis", { method: "POST", body: JSON.stringify({ p_category: filters.category }) }),
   ]);
   const normalized = normalizeDashboardData(payload ?? {});
+  normalized.marketing = normalizeDashboardData({ marketing }).marketing;
   normalized.executive.criticalSkus = num(inventory.criticalSkus ?? inventory.critical_skus);
   normalized.executive.inventoryExposureCents = num(inventory.inventoryExposureCents ?? inventory.inventory_exposure_cents);
   normalized.scenarioBasis = {
