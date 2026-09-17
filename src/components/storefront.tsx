@@ -107,7 +107,7 @@ function ProductDetail({ product, persistent, onBack, onAdded, onAlternative }: 
 
   async function choose(variant: ProductVariant, fit = fitPreference) {
     setSelected(variant); setDecision(undefined); decisionRef.current=undefined; setEvaluating(true); setAiAssisted(false); setAiLoading(false);
-    try { if (persistent) { const response = await commerceApi.evaluate(product.id, variant.id, fit); setResult(response.result as RiskResult); setInterventionId(response.interventionId); activeIntervention.current=response.interventionId; setAiLoading(true); void commerceApi.explain(response.interventionId).then((explanation)=>{if(explanation.enabled&&explanation.answer&&activeIntervention.current===response.interventionId&&!decisionRef.current){setResult((current)=>current?{...current,message:explanation.answer!.message}:current);setAiAssisted(explanation.answer.provider!=="deterministic");}}).catch(()=>{}).finally(()=>{if(activeIntervention.current===response.interventionId)setAiLoading(false);}); } else { setResult(evaluateCheckoutRisk(product, variant, fit)); setInterventionId(undefined); activeIntervention.current=undefined; } }
+    try { if (persistent) { const response = await commerceApi.evaluate(product.id, variant.id, fit); setResult(response.result); setInterventionId(response.interventionId); activeIntervention.current=response.interventionId; setAiLoading(true); void commerceApi.explain(response.interventionId).then((explanation)=>{if(explanation.enabled&&explanation.answer&&activeIntervention.current===response.interventionId&&!decisionRef.current){setResult((current)=>current?{...current,message:explanation.answer!.message}:current);setAiAssisted(explanation.answer.provider!=="deterministic");}}).catch(()=>{}).finally(()=>{if(activeIntervention.current===response.interventionId)setAiLoading(false);}); } else { setResult(evaluateCheckoutRisk(product, variant, fit)); setInterventionId(undefined); activeIntervention.current=undefined; } }
     finally { setEvaluating(false); }
   }
 
@@ -173,6 +173,7 @@ function ProductDetail({ product, persistent, onBack, onAdded, onAlternative }: 
               <div>
                 <p className="mipo-label">Escolha assistida · MIPO {aiAssisted&&<span>· Explicação assistida por IA</span>}</p>
                 <h2>{result.message}</h2>
+                <p className="mipo-score">Score determinístico: <strong>{result.score}/100</strong> · evidência coberta: {Math.round(result.evidenceCoverage * 100)}%</p>
                 <p>{result.evidence}</p>
                 {aiLoading&&<p className="mipo-ai-status" role="status">Aprimorando a explicação…</p>}
                 {(result.recommendedVariant || result.alternativeProductId) && !decision && <div className="mipo-actions">

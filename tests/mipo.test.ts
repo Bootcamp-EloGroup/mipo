@@ -8,6 +8,8 @@ describe("evaluateCheckoutRisk", () => {
     const result = evaluateCheckoutRisk(product, product.variants[1]);
     expect(result.risk).toBe("size");
     expect(result.recommendedVariant?.size).toBe("G");
+    expect(result.score).toBeGreaterThanOrEqual(70);
+    expect(result.evidenceCoverage).toBe(1);
   });
 
   it("não inventa recomendação quando não há alternativa melhor", () => {
@@ -41,5 +43,6 @@ describe("evaluateCheckoutRisk", () => {
     const result = evaluateCheckoutRisk(product, product.variants[1]);
     expect(result.risk).toBe("insufficient_evidence");
     expect(result.recommendedVariant).toBeUndefined();
+    expect(result.evidenceCoverage).toBeGreaterThanOrEqual(0.5);
   });
 });

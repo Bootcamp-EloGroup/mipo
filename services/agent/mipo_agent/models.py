@@ -19,3 +19,18 @@ class AgentAnswer(BaseModel):
  provider:Literal["eloagents","groq","deterministic"]
  model:str
  status:Literal["eloagents_succeeded","groq_succeeded","deterministic_fallback","rejected_by_policy"]
+
+class AgentStep(BaseModel):
+ stepNumber:int
+ attemptNumber:int=1
+ provider:Literal["python","eloagents","groq"]
+ kind:Literal["tool_call","final_answer"]
+ toolName:str|None=None
+ status:Literal["succeeded","failed","rejected"]
+ durationMs:int
+ failureReason:str|None=None
+
+class AgentExecution(BaseModel):
+ answer:AgentAnswer
+ steps:list[AgentStep]
+ failureReason:Literal["timeout","provider_unavailable","invalid_output","policy_rejected"]|None=None
