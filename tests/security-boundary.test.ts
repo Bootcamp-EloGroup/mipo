@@ -6,6 +6,7 @@ describe("fronteira de segurança do Supabase", () => {
     const clientFiles = [
       "src/components/storefront.tsx",
       "src/services/commerce-api.ts",
+      "src/components/manager-dashboard.tsx",
     ];
 
     for (const file of clientFiles) {
@@ -15,6 +16,8 @@ describe("fronteira de segurança do Supabase", () => {
       expect(source).not.toMatch(/MIPO_PYTHON_AGENT_TOKEN/);
     }
   });
+
+  it("mantém a agregação gerencial e o RPC no servidor",()=>{expect(readFileSync("src/server/manager-dashboard.ts","utf8")).toContain('import "server-only"');expect(readFileSync("src/components/manager-dashboard.tsx","utf8")).not.toMatch(/SUPABASE_|manager_import_runs|customer_segment_snapshots|service_daily_metrics/);});
 
   it("marca o cliente REST privilegiado como exclusivo do servidor", () => {
     const source = readFileSync("src/lib/supabase-rest.ts", "utf8");
