@@ -206,48 +206,65 @@ function ProductDetail({
   const isApparel = product.productKind === "apparel" || (!product.productKind && product.category !== "Maquiagem");
 
   async function choose(variant: ProductVariant, fit = fitPreference, userSize = usualSize) {
-    setSelected(variant); setDecision(undefined); decisionRef.current=undefined; setEvaluating(true); setAiAssisted(false); setAiLoading(false);
+    setSelected(variant);
+    setDecision(undefined);
+    decisionRef.current = undefined;
+    setAiAssisted(false);
+    setResult(null); // Do not show premature or mocked result while analyzing!
+
+    if (!isApparel && (!selectionContext || Object.keys(selectionContext.answers ?? {}).length < productQuestions(product).length)) {
+      setInterventionId(undefined);
+      activeIntervention.current = undefined;
+      setAiLoading(false);
+      return;
+    }
+
+    let currentInterventionId = `local-${crypto.randomUUID()}`;
+    let initialResult: RiskResult;
+
+    if (persistent) {
+      const response = await commerceApi.evaluate(product.id, variant.id, fit, isApparel ? undefined : selectionContext, userSize);
+      initialResult = response.result;
+      currentInterventionId = response.interventionId;
+    } else {
+      initialResult = selectionContext
+        ? evaluateSelectionContext(product, variant, selectionContext)
+        : evaluateCheckoutRisk(product, variant, fit, undefined, userSize);
+    }
+
+    setInterventionId(currentInterventionId);
+    activeIntervention.current = currentInterventionId;
+    setAiLoading(true);
+
     try {
-      if (!isApparel && (!selectionContext || Object.keys(selectionContext.answers ?? {}).length < productQuestions(product).length)) {
-        setResult(null); setInterventionId(undefined); activeIntervention.current=undefined; return;
-      }
-
-      let currentInterventionId = `local-${crypto.randomUUID()}`;
-      let initialResult: RiskResult;
-
-      if (persistent) {
-        const response = await commerceApi.evaluate(product.id, variant.id, fit, isApparel ? undefined : selectionContext, userSize);
-        initialResult = response.result;
-        currentInterventionId = response.interventionId;
-      } else {
-        initialResult = selectionContext
-          ? evaluateSelectionContext(product, variant, selectionContext)
-          : evaluateCheckoutRisk(product, variant, fit, undefined, userSize);
-      }
-
-      setResult(initialResult);
-      setInterventionId(currentInterventionId);
-      activeIntervention.current = currentInterventionId;
-
-      // Dynamic AI explanation trigger (works both locally and in persistent mode)
-      setAiLoading(true);
-      void commerceApi.explain({
+      const explanation = await commerceApi.explain({
         interventionId: currentInterventionId,
         productId: product.id,
         variantId: variant.id,
         fitPreference: fit,
         selectionContext: isApparel ? undefined : selectionContext,
         usualSize: userSize,
-      }).then((explanation) => {
-        if (explanation.enabled && explanation.answer && activeIntervention.current === currentInterventionId && !decisionRef.current) {
-          setResult((current) => current ? { ...current, message: explanation.answer!.message } : current);
-          setAiAssisted(explanation.answer.provider !== "deterministic");
-        }
-      }).catch(() => {}).finally(() => {
-        if (activeIntervention.current === currentInterventionId) setAiLoading(false);
       });
+
+      if (activeIntervention.current === currentInterventionId && !decisionRef.current) {
+        if (explanation.enabled && explanation.answer) {
+          setResult({
+            ...initialResult,
+            message: explanation.answer.message,
+          });
+          setAiAssisted(explanation.answer.provider !== "deterministic");
+        } else {
+          setResult(initialResult);
+        }
+      }
+    } catch {
+      if (activeIntervention.current === currentInterventionId && !decisionRef.current) {
+        setResult(initialResult);
+      }
     } finally {
-      setEvaluating(false);
+      if (activeIntervention.current === currentInterventionId) {
+        setAiLoading(false);
+      }
     }
   }
 
@@ -262,12 +279,17 @@ function ProductDetail({
   }, [suggestedSize]);
 
   async function acceptRecommendation() {
-    if (!selected || !result?.recommendedVariant) return;
-    if (persistent && interventionId) await commerceApi.decide(interventionId, "accepted");
-    else recordMipoEvent({ productId: product.id, selectedVariantId: selected.id, recommendedVariantId: result.recommendedVariant.id, risk: result.risk, decision: "accepted" });
-    setSelected(result.recommendedVariant);
-    setDecision("accepted");
-    decisionRef.current="accepted";
+    if (!selected || !result?.recommendedVariant || decisionLoading) return;
+    setDecisionLoading(true);
+    try {
+      if (persistent && interventionId) await commerceApi.decide(interventionId, "accepted");
+      else recordMipoEvent({ productId: product.id, selectedVariantId: selected.id, recommendedVariantId: result.recommendedVariant.id, risk: result.risk, decision: "accepted" });
+      setSelected(result.recommendedVariant);
+      setDecision("accepted");
+      decisionRef.current="accepted";
+    } finally {
+      setDecisionLoading(false);
+    }
   }
 
   async function keepOriginal() {
@@ -276,6 +298,21 @@ function ProductDetail({
     else recordMipoEvent({ productId: product.id, selectedVariantId: selected.id, recommendedVariantId: result.recommendedVariant?.id, risk: result.risk, decision: "kept_original" });
     setDecision("kept_original");
     decisionRef.current="kept_original";
+  }
+
+  const [addingToCart, setAddingToCart] = useState(false);
+
+  async function handleAddToCart() {
+    if (!selected || addingToCart || decisionLoading || requiresDecision || (!isApparel && Object.keys(selectionContext?.answers ?? {}).length < contextualQuestions.length)) return;
+    setAddingToCart(true);
+    try {
+      if (persistent && interventionId && !result?.recommendedVariant && !result?.alternativeProductId) {
+        await commerceApi.decide(interventionId, "not_required");
+      }
+      await onAdded(product, selected, decision, selectionContext);
+    } finally {
+      setAddingToCart(false);
+    }
   }
 
   const contextualQuestions = isApparel ? [] : productQuestions(product);
@@ -321,20 +358,39 @@ function ProductDetail({
           </>}
 
           {!isApparel && contextualQuestions.map((question) => <fieldset className="fit-picker" key={question.id}><legend>{question.label}</legend><div>{question.options.map((option) => <button type="button" key={option} aria-pressed={selectionContext?.answers?.[question.id] === option} className={selectionContext?.answers?.[question.id] === option ? "selected" : ""} onClick={() => { const answers = { ...(selectionContext?.answers ?? {}), [question.id]: option }; const first = Object.values(answers)[0] ?? option; setSelectionContext({ label: "Preferências do produto", preference: first, answers }); setResult(null); setInterventionId(undefined); activeIntervention.current=undefined; }}>{option}</button>)}</div></fieldset>)}
-          {!isApparel && selected && selectionContext && Object.keys(selectionContext.answers ?? {}).length === contextualQuestions.length && !result && <button type="button" className="agent-continue" disabled={evaluating} onClick={() => void choose(selected)}>{evaluating ? "Consultando o agente…" : "Pedir orientação ao agente"}<Icon name="spark" /></button>}
+          {!isApparel && selected && selectionContext && Object.keys(selectionContext.answers ?? {}).length === contextualQuestions.length && !result && !aiLoading && <button type="button" className="agent-continue" onClick={() => void choose(selected)}>Pedir orientação ao agente<Icon name="spark" /></button>}
 
-          {evaluating && <p className="mipo-loading" role="status">Analisando sua escolha com o atelier…</p>}
-          {selected && result && !evaluating && (
-            <aside className={`mipo-card mipo-card--${result.risk}`} aria-live="polite">
+          {/* Feedback State 1: Active AI Analyzing Thinking State */}
+          {selected && aiLoading && (
+            <aside className="mipo-card mipo-card--analyzing" aria-live="polite">
+              <div className="mipo-card__mark mipo-card__mark--pulse">
+                <Icon name="spark" />
+              </div>
+              <div>
+                <div className="mipo-thinking-badge">
+                  <Icon name="spark" />
+                  <span>MIPO Atelier consultando caimento e tecidos…</span>
+                </div>
+                <span className="mipo-shimmer-line mipo-shimmer-line--title" />
+                <span className="mipo-shimmer-line mipo-shimmer-line--body" />
+                <p className="mipo-thinking-text">
+                  Analisando proporções para o tamanho {selected.size ?? selected.title}, elasticidade da fibra e histórico de trocas…
+                </p>
+              </div>
+            </aside>
+          )}
+
+          {/* Feedback State 2: Final Evaluated AI Response (no preliminary flashing) */}
+          {selected && result && !aiLoading && (
+            <aside className={`mipo-card mipo-card--${result.risk} reveal`} aria-live="polite">
               <div className="mipo-card__mark"><Icon name="spark" /></div>
               <div>
                 <p className="mipo-label">Escolha assistida · MIPO {aiAssisted && <span>· Explicação contextual por IA</span>}</p>
                 <h2>{result.message}</h2>
                 <p className="mipo-score">Score determinístico: <strong>{result.score}/100</strong> · evidência coberta: {Math.round(result.evidenceCoverage * 100)}%</p>
                 <p>{result.evidence}</p>
-                {aiLoading && <p className="mipo-ai-status" role="status">Refinando explicação com propriedades do tecido…</p>}
                 {(result.recommendedVariant || result.alternativeProductId) && !decision && <div className="mipo-actions">
-                  {result.recommendedVariant && <button type="button" onClick={acceptRecommendation}>Usar tamanho {result.recommendedVariant.size}</button>}
+                  {result.recommendedVariant && <button type="button" disabled={decisionLoading} onClick={acceptRecommendation}>{decisionLoading ? "Aplicando tamanho…" : `Usar tamanho ${result.recommendedVariant.size}`}</button>}
                   {result.alternativeProductId && <button type="button" onClick={() => onAlternative(result.alternativeProductId!)}>Ver alternativa</button>}
                   <button type="button" className="quiet" onClick={keepOriginal}>Manter minha escolha</button>
                 </div>}
@@ -343,8 +399,18 @@ function ProductDetail({
             </aside>
           )}
 
-          <button className="primary-action" disabled={!selected || evaluating || decisionLoading || requiresDecision || (!isApparel && Object.keys(selectionContext?.answers ?? {}).length < contextualQuestions.length)} onClick={async () => { if (!selected) return; if (persistent && interventionId && !result?.recommendedVariant && !result?.alternativeProductId) await commerceApi.decide(interventionId, "not_required"); await onAdded(product, selected, decision, selectionContext); }}>
-            <span>Adicionar à sacola</span><Icon name="arrow" />
+          <button className="primary-action" disabled={!selected || aiLoading || addingToCart || decisionLoading || requiresDecision || (!isApparel && Object.keys(selectionContext?.answers ?? {}).length < contextualQuestions.length)} onClick={handleAddToCart}>
+            {addingToCart ? (
+              <>
+                <span>Adicionando à sacola…</span>
+                <span className="button-spinner" aria-hidden="true" />
+              </>
+            ) : (
+              <>
+                <span>Adicionar à sacola</span>
+                <Icon name="arrow" />
+              </>
+            )}
           </button>
           <div className="detail-notes"><span>Frete grátis acima de R$ 500</span><span>Troca em até 30 dias</span></div>
         </section>
@@ -355,25 +421,55 @@ function ProductDetail({
 
 function CartAuditCard({ cart, onOpenConcierge }: { cart: Cart; onOpenConcierge: () => void }) {
   const [audit, setAudit] = useState<{ status: "aligned" | "attention"; headline: string; advice: string; careTips: string[] } | null>(null);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (cart.items.length === 0) {
       setAudit(null);
+      setLoading(false);
       return;
     }
     let active = true;
+    setLoading(true);
     commerceApi.auditCart(cart.items)
       .then((res) => {
-        if (active) setAudit(res);
+        if (active) {
+          setAudit(res);
+        }
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        if (active) setLoading(false);
+      });
     return () => { active = false; };
   }, [cart.items]);
 
-  if (!audit || cart.items.length === 0) return null;
+  if (cart.items.length === 0) return null;
+
+  if (loading && !audit) {
+    return (
+      <aside className="cart-audit-card cart-audit-card--loading" aria-live="polite">
+        <div className="cart-audit-card__mark mipo-card__mark--pulse">
+          <Icon name="spark" />
+        </div>
+        <div>
+          <div className="mipo-thinking-badge">
+            <Icon name="spark" />
+            <span>MIPO Atelier · Auditoria em tempo real</span>
+          </div>
+          <span className="mipo-shimmer-line mipo-shimmer-line--title" />
+          <p className="mipo-thinking-text">
+            Auditando coerência entre tamanhos e mapeando regras de conservação têxtil…
+          </p>
+        </div>
+      </aside>
+    );
+  }
+
+  if (!audit) return null;
 
   return (
-    <aside className={`cart-audit-card ${audit.status === "attention" ? "cart-audit-card--attention" : ""}`} aria-live="polite">
+    <aside className={`cart-audit-card ${audit.status === "attention" ? "cart-audit-card--attention" : ""} reveal`} aria-live="polite">
       <div className="cart-audit-card__mark">
         <Icon name="spark" />
       </div>
@@ -645,10 +741,19 @@ function MipoAtelierDrawer({
           ))}
 
           {loading && (
-            <div className="mipo-chat-bubble mipo-chat-bubble--assistant">
-              <div className="mipo-typing">
-                <Icon name="spark" />
-                <span>MIPO está analisando o caimento...</span>
+            <div className="mipo-chat-bubble mipo-chat-bubble--assistant reveal">
+              <div className="mipo-bubble-meta">
+                <Icon name="spark" /> MIPO Concierge
+              </div>
+              <div className="mipo-bubble-body mipo-bubble-body--thinking">
+                <div className="mipo-typing-dots">
+                  <span />
+                  <span />
+                  <span />
+                </div>
+                <p className="mipo-thinking-text">
+                  Consultando modelagens, tecidos e caimentos no atelier…
+                </p>
               </div>
             </div>
           )}

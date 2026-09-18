@@ -98,3 +98,32 @@
 .cart-audit-card__action:hover{background:var(--ink);color:white}
 .cart-audit-card__action svg{width:14px;height:14px}
 
+/* Advanced Feedback & UI States */
+.mipo-card--analyzing{background:linear-gradient(135deg,#f2f4ec 0%,#f8f9f4 100%);border-color:#b9c2ad;animation:fadeIn .3s ease-out both}
+.mipo-card__mark--pulse{animation:pulseGlow 2s ease-in-out infinite}
+@keyframes pulseGlow{0%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(78,88,65,.35)}50%{transform:scale(1.06);box-shadow:0 0 0 8px rgba(78,88,65,0)}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+.mipo-thinking-badge{display:inline-flex;align-items:center;gap:6px;margin-bottom:8px;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--olive)}
+.mipo-thinking-badge svg{width:13px;height:13px;animation:spin 3s linear infinite}
+
+.mipo-shimmer-line{display:block;border-radius:4px;background:linear-gradient(90deg,#e4e2d8 25%,#f5f4ee 50%,#e4e2d8 75%);background-size:200% 100%;animation:shimmer 1.8s infinite linear}
+.mipo-shimmer-line--title{height:18px;width:72%;margin:8px 0 10px}
+.mipo-shimmer-line--body{height:12px;width:90%;margin-bottom:10px}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+.mipo-thinking-text{margin:4px 0 0;font-size:12px;line-height:1.5;color:var(--muted);font-style:italic}
+
+.mipo-bubble-body--thinking{display:flex;flex-direction:column;gap:6px}
+.mipo-typing-dots{display:inline-flex;align-items:center;gap:5px;padding:4px 0}
+.mipo-typing-dots span{width:6px;height:6px;border-radius:50%;background:var(--olive);animation:bounceDot 1.4s infinite ease-in-out both}
+.mipo-typing-dots span:nth-child(1){animation-delay:-0.32s}
+.mipo-typing-dots span:nth-child(2){animation-delay:-0.16s}
+@keyframes bounceDot{0%,80%,100%{transform:scale(0);opacity:.35}40%{transform:scale(1);opacity:1}}
+
+.cart-audit-card--loading{background:#f6f8f2;border-color:#d0d6c4}
+
+.button-spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}
+.toast{display:inline-flex;align-items:center;gap:10px}
+.toast-icon{display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,.25);font-size:11px;font-weight:800}
+
