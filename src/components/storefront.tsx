@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { products as localProducts } from "@/src/data/products";
-import type { Cart, Product, ProductVariant, SelectionContext } from "@/src/domain/commerce";
+import type { Cart, Product, ProductVariant, SelectionContext, Size } from "@/src/domain/commerce";
 import { localCommerceRepository, recordMipoEvent } from "@/src/services/local-commerce";
 import { commerceApi } from "@/src/services/commerce-api";
 import { evaluateCheckoutRisk, evaluateSelectionContext, type RiskResult } from "@/src/services/mipo";
@@ -171,7 +171,23 @@ function Catalog({ products, onProduct }: { products: Product[]; onProduct: (pro
   );
 }
 
-function ProductDetail({ product, persistent, onBack, onAdded, onAlternative }: { product: Product; persistent: boolean; onBack: () => void; onAdded: (product: Product, variant: ProductVariant, decision?: "accepted" | "kept_original", selectionContext?: SelectionContext) => void | Promise<void>; onAlternative: (id: string) => void }) {
+function ProductDetail({
+  product,
+  persistent,
+  onBack,
+  onAdded,
+  onAlternative,
+  onOpenConcierge,
+  suggestedSize,
+}: {
+  product: Product;
+  persistent: boolean;
+  onBack: () => void;
+  onAdded: (product: Product, variant: ProductVariant, decision?: "accepted" | "kept_original", selectionContext?: SelectionContext) => void | Promise<void>;
+  onAlternative: (id: string) => void;
+  onOpenConcierge: (product: Product) => void;
+  suggestedSize?: Size | null;
+}) {
   const [selected, setSelected] = useState<ProductVariant | null>(null);
   const [decision, setDecision] = useState<"accepted" | "kept_original" | undefined>();
   const [result, setResult] = useState<RiskResult | null>(null);
@@ -187,15 +203,68 @@ function ProductDetail({ product, persistent, onBack, onAdded, onAlternative }: 
   const decisionRef = useRef<typeof decision>(undefined);
   const sizePickerRef = useRef<HTMLFieldSetElement>(null);
 
+  const isApparel = product.productKind === "apparel" || (!product.productKind && product.category !== "Maquiagem");
+
   async function choose(variant: ProductVariant, fit = fitPreference, userSize = usualSize) {
     setSelected(variant); setDecision(undefined); decisionRef.current=undefined; setEvaluating(true); setAiAssisted(false); setAiLoading(false);
-    try { if (!isApparel && (!selectionContext || Object.keys(selectionContext.answers ?? {}).length < productQuestions(product).length)) { setResult(null); setInterventionId(undefined); activeIntervention.current=undefined; return; } if (persistent) { const response = await commerceApi.evaluate(product.id, variant.id, fit, isApparel ? undefined : selectionContext, userSize); setResult(response.result); setInterventionId(response.interventionId); activeIntervention.current=response.interventionId; setAiLoading(true); void commerceApi.explain(response.interventionId).then((explanation)=>{if(explanation.enabled&&explanation.answer&&activeIntervention.current===response.interventionId&&!decisionRef.current){setResult((current)=>current?{...current,message:explanation.answer!.message}:current);setAiAssisted(explanation.answer.provider!=="deterministic");}}).catch(()=>{}).finally(()=>{if(activeIntervention.current===response.interventionId)setAiLoading(false);}); } else { setResult(selectionContext ? evaluateSelectionContext(product, variant, selectionContext) : evaluateCheckoutRisk(product, variant, fit, undefined, userSize)); setInterventionId(undefined); activeIntervention.current=undefined; } }
-    finally { setEvaluating(false); }
+    try {
+      if (!isApparel && (!selectionContext || Object.keys(selectionContext.answers ?? {}).length < productQuestions(product).length)) {
+        setResult(null); setInterventionId(undefined); activeIntervention.current=undefined; return;
+      }
+
+      let currentInterventionId = `local-${crypto.randomUUID()}`;
+      let initialResult: RiskResult;
+
+      if (persistent) {
+        const response = await commerceApi.evaluate(product.id, variant.id, fit, isApparel ? undefined : selectionContext, userSize);
+        initialResult = response.result;
+        currentInterventionId = response.interventionId;
+      } else {
+        initialResult = selectionContext
+          ? evaluateSelectionContext(product, variant, selectionContext)
+          : evaluateCheckoutRisk(product, variant, fit, undefined, userSize);
+      }
+
+      setResult(initialResult);
+      setInterventionId(currentInterventionId);
+      activeIntervention.current = currentInterventionId;
+
+      // Dynamic AI explanation trigger (works both locally and in persistent mode)
+      setAiLoading(true);
+      void commerceApi.explain({
+        interventionId: currentInterventionId,
+        productId: product.id,
+        variantId: variant.id,
+        fitPreference: fit,
+        selectionContext: isApparel ? undefined : selectionContext,
+        usualSize: userSize,
+      }).then((explanation) => {
+        if (explanation.enabled && explanation.answer && activeIntervention.current === currentInterventionId && !decisionRef.current) {
+          setResult((current) => current ? { ...current, message: explanation.answer!.message } : current);
+          setAiAssisted(explanation.answer.provider !== "deterministic");
+        }
+      }).catch(() => {}).finally(() => {
+        if (activeIntervention.current === currentInterventionId) setAiLoading(false);
+      });
+    } finally {
+      setEvaluating(false);
+    }
   }
+
+  // React to size suggestion from Concierge
+  useEffect(() => {
+    if (suggestedSize && isApparel) {
+      const match = product.variants.find((v) => v.size === suggestedSize);
+      if (match && match.id !== selected?.id) {
+        void choose(match);
+      }
+    }
+  }, [suggestedSize]);
 
   async function acceptRecommendation() {
     if (!selected || !result?.recommendedVariant) return;
-    if (persistent && interventionId) await commerceApi.decide(interventionId, "accepted"); else recordMipoEvent({ productId: product.id, selectedVariantId: selected.id, recommendedVariantId: result.recommendedVariant.id, risk: result.risk, decision: "accepted" });
+    if (persistent && interventionId) await commerceApi.decide(interventionId, "accepted");
+    else recordMipoEvent({ productId: product.id, selectedVariantId: selected.id, recommendedVariantId: result.recommendedVariant.id, risk: result.risk, decision: "accepted" });
     setSelected(result.recommendedVariant);
     setDecision("accepted");
     decisionRef.current="accepted";
@@ -203,27 +272,15 @@ function ProductDetail({ product, persistent, onBack, onAdded, onAlternative }: 
 
   async function keepOriginal() {
     if (!selected || !result) return;
-    if (persistent && interventionId) await commerceApi.decide(interventionId, "kept_original"); else recordMipoEvent({ productId: product.id, selectedVariantId: selected.id, recommendedVariantId: result.recommendedVariant?.id, risk: result.risk, decision: "kept_original" });
+    if (persistent && interventionId) await commerceApi.decide(interventionId, "kept_original");
+    else recordMipoEvent({ productId: product.id, selectedVariantId: selected.id, recommendedVariantId: result.recommendedVariant?.id, risk: result.risk, decision: "kept_original" });
     setDecision("kept_original");
     decisionRef.current="kept_original";
   }
 
-  async function continueWithSelection() {
-    if (!selected || !result || decisionLoading) return;
-    setDecisionLoading(true);
-    try {
-      if (persistent && interventionId) await commerceApi.decide(interventionId, "kept_original");
-      else recordMipoEvent({ productId: product.id, selectedVariantId: selected.id, risk: result.risk, decision: "kept_original" });
-      setDecision("kept_original");
-      decisionRef.current="kept_original";
-      await onAdded(product, selected, "kept_original", selectionContext);
-    } finally { setDecisionLoading(false); }
-  }
-
-  const isApparel = product.productKind === "apparel" || (!product.productKind && product.category !== "Maquiagem");
   const contextualQuestions = isApparel ? [] : productQuestions(product);
   const selectedLabel = selected ? variantLabel(product, selected, product.variants.findIndex((variant) => variant.id === selected.id)) : "selecione";
-  const requiresDecision=Boolean(result&&result.risk!=="none"&&!decision&&(result.recommendedVariant||result.alternativeProductId));
+  const requiresDecision = Boolean(result && result.risk !== "none" && !decision && (result.recommendedVariant || result.alternativeProductId));
 
   return (
     <main className="detail-page">
@@ -238,24 +295,44 @@ function ProductDetail({ product, persistent, onBack, onAdded, onAlternative }: 
           <p className="description">{product.description}</p>
 
           <fieldset className="size-picker" ref={sizePickerRef}>
-            <legend><span>{isApparel ? "Tamanho" : product.variantAttribute === "shade" ? "Tom" : "Variação"}: <b>{selectedLabel}</b></span>{isApparel&&<button type="button">Guia de medidas</button>}</legend>
+            <legend>
+              <span>{isApparel ? "Tamanho" : product.variantAttribute === "shade" ? "Tom" : "Variação"}: <b>{selectedLabel}</b></span>
+              {isApparel && <button type="button" onClick={() => onOpenConcierge(product)}>Guia & Concierge de medidas</button>}
+            </legend>
             <div>{product.variants.map((variant, index) => <button id={`size-${variant.id}`} type="button" className={selected?.id === variant.id ? "selected" : ""} onClick={() => choose(variant)} key={variant.id}>{variantLabel(product, variant, index)}</button>)}</div>
           </fieldset>
 
-          {isApparel&&<><fieldset className="fit-picker"><legend>Qual tamanho você costuma usar?</legend><div>{(["P","M","G","GG"] as const).map((value) => <button type="button" key={value} aria-pressed={usualSize === value} className={usualSize === value ? "selected" : ""} onClick={() => { setUsualSize(value); if (selected) void choose(selected, fitPreference, value); }}>{value}</button>)}</div><small>Essa resposta ajuda a contextualizar sua escolha, sem determinar o tamanho por você.</small></fieldset><fieldset className="fit-picker"><legend>Como você prefere o caimento?</legend><div>{([["fitted","Mais ajustado"],["regular","Regular"],["loose","Mais solto"]] as const).map(([value,label]) => <button type="button" key={value} aria-pressed={fitPreference === value} className={fitPreference === value ? "selected" : ""} onClick={() => { setFitPreference(value); if (selected) void choose(selected, value); }}>{label}</button>)}</div><small>Usamos essa preferência para comparar o histórico de tamanho.</small></fieldset></>}
+          <button type="button" className="mipo-inline-concierge-btn" onClick={() => onOpenConcierge(product)}>
+            <Icon name="spark" />
+            <span>Dúvidas de caimento, tecido ou combinações? Fale com a MIPO Atelier</span>
+          </button>
+
+          {isApparel && <>
+            <fieldset className="fit-picker">
+              <legend>Qual tamanho você costuma usar?</legend>
+              <div>{(["P","M","G","GG"] as const).map((value) => <button type="button" key={value} aria-pressed={usualSize === value} className={usualSize === value ? "selected" : ""} onClick={() => { setUsualSize(value); if (selected) void choose(selected, fitPreference, value); }}>{value}</button>)}</div>
+              <small>Essa resposta ajuda a contextualizar sua escolha, sem determinar o tamanho por você.</small>
+            </fieldset>
+            <fieldset className="fit-picker">
+              <legend>Como você prefere o caimento?</legend>
+              <div>{([["fitted","Mais ajustado"],["regular","Regular"],["loose","Mais solto"]] as const).map(([value,label]) => <button type="button" key={value} aria-pressed={fitPreference === value} className={fitPreference === value ? "selected" : ""} onClick={() => { setFitPreference(value); if (selected) void choose(selected, value); }}>{label}</button>)}</div>
+              <small>Usamos essa preferência para comparar o histórico de tamanho e elasticidade do tecido.</small>
+            </fieldset>
+          </>}
+
           {!isApparel && contextualQuestions.map((question) => <fieldset className="fit-picker" key={question.id}><legend>{question.label}</legend><div>{question.options.map((option) => <button type="button" key={option} aria-pressed={selectionContext?.answers?.[question.id] === option} className={selectionContext?.answers?.[question.id] === option ? "selected" : ""} onClick={() => { const answers = { ...(selectionContext?.answers ?? {}), [question.id]: option }; const first = Object.values(answers)[0] ?? option; setSelectionContext({ label: "Preferências do produto", preference: first, answers }); setResult(null); setInterventionId(undefined); activeIntervention.current=undefined; }}>{option}</button>)}</div></fieldset>)}
           {!isApparel && selected && selectionContext && Object.keys(selectionContext.answers ?? {}).length === contextualQuestions.length && !result && <button type="button" className="agent-continue" disabled={evaluating} onClick={() => void choose(selected)}>{evaluating ? "Consultando o agente…" : "Pedir orientação ao agente"}<Icon name="spark" /></button>}
 
-          {evaluating && <p className="mipo-loading" role="status">Analisando sua escolha…</p>}
+          {evaluating && <p className="mipo-loading" role="status">Analisando sua escolha com o atelier…</p>}
           {selected && result && !evaluating && (
             <aside className={`mipo-card mipo-card--${result.risk}`} aria-live="polite">
               <div className="mipo-card__mark"><Icon name="spark" /></div>
               <div>
-                <p className="mipo-label">Escolha assistida · MIPO {aiAssisted&&<span>· Explicação assistida por IA</span>}</p>
+                <p className="mipo-label">Escolha assistida · MIPO {aiAssisted && <span>· Explicação contextual por IA</span>}</p>
                 <h2>{result.message}</h2>
                 <p className="mipo-score">Score determinístico: <strong>{result.score}/100</strong> · evidência coberta: {Math.round(result.evidenceCoverage * 100)}%</p>
                 <p>{result.evidence}</p>
-                {aiLoading&&<p className="mipo-ai-status" role="status">Aprimorando a explicação…</p>}
+                {aiLoading && <p className="mipo-ai-status" role="status">Refinando explicação com propriedades do tecido…</p>}
                 {(result.recommendedVariant || result.alternativeProductId) && !decision && <div className="mipo-actions">
                   {result.recommendedVariant && <button type="button" onClick={acceptRecommendation}>Usar tamanho {result.recommendedVariant.size}</button>}
                   {result.alternativeProductId && <button type="button" onClick={() => onAlternative(result.alternativeProductId!)}>Ver alternativa</button>}
@@ -276,38 +353,347 @@ function ProductDetail({ product, persistent, onBack, onAdded, onAlternative }: 
   );
 }
 
-function CartView({ cart, onQuantity, onRemove, onCheckout, onCatalog }: { cart: Cart; onQuantity: (id:string, quantity:number) => void; onRemove: (id:string) => void; onCheckout: () => void; onCatalog: () => void }) {
+function CartAuditCard({ cart, onOpenConcierge }: { cart: Cart; onOpenConcierge: () => void }) {
+  const [audit, setAudit] = useState<{ status: "aligned" | "attention"; headline: string; advice: string; careTips: string[] } | null>(null);
+
+  useEffect(() => {
+    if (cart.items.length === 0) {
+      setAudit(null);
+      return;
+    }
+    let active = true;
+    commerceApi.auditCart(cart.items)
+      .then((res) => {
+        if (active) setAudit(res);
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [cart.items]);
+
+  if (!audit || cart.items.length === 0) return null;
+
+  return (
+    <aside className={`cart-audit-card ${audit.status === "attention" ? "cart-audit-card--attention" : ""}`} aria-live="polite">
+      <div className="cart-audit-card__mark">
+        <Icon name="spark" />
+      </div>
+      <div>
+        <p className="mipo-label">Auditoria MIPO Atelier · Coerência & Cuidados</p>
+        <h3>{audit.headline}</h3>
+        <p>{audit.advice}</p>
+        {audit.careTips.length > 0 && (
+          <ul>
+            {audit.careTips.map((tip, idx) => (
+              <li key={idx}>{tip}</li>
+            ))}
+          </ul>
+        )}
+        <button type="button" className="cart-audit-card__action" onClick={onOpenConcierge}>
+          <Icon name="spark" />
+          <span>Conversar com a MIPO Atelier</span>
+        </button>
+      </div>
+    </aside>
+  );
+}
+
+function CartView({
+  cart,
+  onQuantity,
+  onRemove,
+  onCheckout,
+  onCatalog,
+  onOpenConcierge,
+}: {
+  cart: Cart;
+  onQuantity: (id: string, quantity: number) => void;
+  onRemove: (id: string) => void;
+  onCheckout: () => void;
+  onCatalog: () => void;
+  onOpenConcierge: () => void;
+}) {
   const total = cart.items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
-  return <main className="cart-page">
-    <div className="page-kicker"><p className="eyebrow">Sua seleção</p><h1>Sacola</h1><span>{cart.items.reduce((sum, item) => sum + item.quantity, 0)} itens</span></div>
-    {cart.items.length === 0 ? <div className="empty-state"><h2>Sua sacola espera por boas escolhas.</h2><button className="primary-action" onClick={onCatalog}>Explorar coleção <Icon name="arrow" /></button></div> : <div className="cart-layout">
-      <section className="cart-lines">{cart.items.map((item) => <article className="cart-line" key={item.id}>
-        <div className="cart-swatch" style={{ background: item.color }} />
-        <div className="cart-line__copy"><p className="eyebrow">Vértice · edição 06</p><h2>{item.title}</h2><p>{item.size ? `Tamanho ${item.size}` : "Variação selecionada"}</p>{item.mipoDecision && <small><Icon name="spark" /> {item.mipoDecision === "accepted" ? "Tamanho escolhido com assistência MIPO" : "Escolha pessoal mantida"}</small>}</div>
-        <div className="quantity"><button aria-label="Diminuir quantidade" onClick={() => onQuantity(item.id, item.quantity - 1)}><Icon name="minus" /></button><span>{item.quantity}</span><button aria-label="Aumentar quantidade" onClick={() => onQuantity(item.id, item.quantity + 1)}><Icon name="plus" /></button></div>
-        <strong>{money.format(item.unitPrice * item.quantity / 100)}</strong>
-        <button className="remove" aria-label={`Remover ${item.title}`} onClick={() => onRemove(item.id)}><Icon name="close" /></button>
-      </article>)}</section>
-      <aside className="summary"><p className="eyebrow">Resumo</p><div><span>Subtotal</span><strong>{money.format(total / 100)}</strong></div><div><span>Entrega</span><span>Calculada no checkout</span></div><hr/><div className="summary__total"><span>Total parcial</span><strong>{money.format(total / 100)}</strong></div><button className="primary-action" onClick={onCheckout}>Continuar para checkout <Icon name="arrow" /></button><p className="demo-note">Demonstração UX/UI. Nenhuma compra ou cobrança será realizada.</p></aside>
-    </div>}
-  </main>;
+  return (
+    <main className="cart-page">
+      <div className="page-kicker">
+        <p className="eyebrow">Sua seleção</p>
+        <h1>Sacola</h1>
+        <span>{cart.items.reduce((sum, item) => sum + item.quantity, 0)} itens</span>
+      </div>
+      {cart.items.length === 0 ? (
+        <div className="empty-state">
+          <h2>Sua sacola espera por boas escolhas.</h2>
+          <button className="primary-action" onClick={onCatalog}>Explorar coleção <Icon name="arrow" /></button>
+        </div>
+      ) : (
+        <div className="cart-layout">
+          <section className="cart-lines">
+            {cart.items.map((item) => (
+              <article className="cart-line" key={item.id}>
+                <div className="cart-swatch" style={{ background: item.color }} />
+                <div className="cart-line__copy">
+                  <p className="eyebrow">Vértice · edição 06</p>
+                  <h2>{item.title}</h2>
+                  <p>{item.size ? `Tamanho ${item.size}` : "Variação selecionada"}</p>
+                  {item.mipoDecision && (
+                    <small>
+                      <Icon name="spark" /> {item.mipoDecision === "accepted" ? "Tamanho escolhido com assistência MIPO" : "Escolha pessoal mantida"}
+                    </small>
+                  )}
+                </div>
+                <div className="quantity">
+                  <button aria-label="Diminuir quantidade" onClick={() => onQuantity(item.id, item.quantity - 1)}><Icon name="minus" /></button>
+                  <span>{item.quantity}</span>
+                  <button aria-label="Aumentar quantidade" onClick={() => onQuantity(item.id, item.quantity + 1)}><Icon name="plus" /></button>
+                </div>
+                <strong>{money.format((item.unitPrice * item.quantity) / 100)}</strong>
+                <button className="remove" aria-label={`Remover ${item.title}`} onClick={() => onRemove(item.id)}><Icon name="close" /></button>
+              </article>
+            ))}
+
+            <CartAuditCard cart={cart} onOpenConcierge={onOpenConcierge} />
+          </section>
+
+          <aside className="summary">
+            <p className="eyebrow">Resumo</p>
+            <div><span>Subtotal</span><strong>{money.format(total / 100)}</strong></div>
+            <div><span>Entrega</span><span>Calculada no checkout</span></div>
+            <hr />
+            <div className="summary__total"><span>Total parcial</span><strong>{money.format(total / 100)}</strong></div>
+            <button className="primary-action" onClick={onCheckout}>Continuar para checkout <Icon name="arrow" /></button>
+            <p className="demo-note">Demonstração UX/UI. Nenhuma compra ou cobrança será realizada.</p>
+          </aside>
+        </div>
+      )}
+    </main>
+  );
 }
 
 function Checkout({ cart, onFinish, onBack }: { cart: Cart; onFinish: () => void; onBack: () => void }) {
   const total = cart.items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
-  return <main className="checkout-page">
-    <button className="back-link" onClick={onBack}>← Voltar à sacola</button>
-    <div className="checkout-heading"><p className="eyebrow">Protótipo de experiência</p><h1>Finalizar escolha</h1><p>Use apenas informações fictícias. Nada será enviado ou processado.</p></div>
-    <div className="checkout-layout">
-      <form onSubmit={(event) => { event.preventDefault(); onFinish(); }}>
-        <section className="form-section"><span className="step-number">01</span><div><h2>Contato</h2><label>E-mail demonstrativo<input required type="email" name="email" autoComplete="email" spellCheck={false} placeholder="Ex.: demo@vertice.local…" /></label></div></section>
-        <section className="form-section"><span className="step-number">02</span><div><h2>Entrega simulada</h2><div className="form-grid"><label>Nome fictício<input required name="name" autoComplete="name" placeholder="Ex.: Cliente Demo…" /></label><label>CEP fictício<input required name="postal-code" autoComplete="postal-code" inputMode="numeric" placeholder="Ex.: 00000-000…" /></label><label className="wide">Endereço fictício<input required name="address" autoComplete="street-address" placeholder="Ex.: Rua da Demonstração, 100…" /></label><label>Cidade<input required name="city" autoComplete="address-level2" placeholder="Ex.: São Paulo…" /></label><label>UF<select name="state" autoComplete="address-level1" defaultValue="SP"><option>SP</option><option>RJ</option><option>MG</option></select></label></div></div></section>
-        <section className="form-section"><span className="step-number">03</span><div><h2>Pagamento visual</h2><label className="mock-payment"><input type="radio" defaultChecked name="payment"/> Cartão fictício <span>•••• 4242</span></label></div></section>
-        <button className="primary-action" type="submit">Concluir demonstração <Icon name="arrow" /></button>
-      </form>
-      <aside className="summary"><p className="eyebrow">Sua escolha</p>{cart.items.map(item => <div className="checkout-item" key={item.id}><span>{item.quantity}× {item.title}{item.size ? ` · ${item.size}` : ""}{item.selectionContext && <small className="checkout-context">{item.selectionContext.label}: {item.selectionContext.preference}</small>}</span><strong>{money.format(item.unitPrice * item.quantity / 100)}</strong></div>)}<hr/><div className="summary__total"><span>Total demonstrativo</span><strong>{money.format(total / 100)}</strong></div></aside>
-    </div>
-  </main>;
+  return (
+    <main className="checkout-page">
+      <button className="back-link" onClick={onBack}>← Voltar à sacola</button>
+      <div className="checkout-heading"><p className="eyebrow">Protótipo de experiência</p><h1>Finalizar escolha</h1><p>Use apenas informações fictícias. Nada será enviado ou processado.</p></div>
+      <div className="checkout-layout">
+        <form onSubmit={(event) => { event.preventDefault(); onFinish(); }}>
+          <section className="form-section"><span className="step-number">01</span><div><h2>Contato</h2><label>E-mail demonstrativo<input required type="email" name="email" autoComplete="email" spellCheck={false} placeholder="Ex.: demo@vertice.local…" /></label></div></section>
+          <section className="form-section"><span className="step-number">02</span><div><h2>Entrega simulada</h2><div className="form-grid"><label>Nome fictício<input required name="name" autoComplete="name" placeholder="Ex.: Cliente Demo…" /></label><label>CEP fictício<input required name="postal-code" autoComplete="postal-code" inputMode="numeric" placeholder="Ex.: 00000-000…" /></label><label className="wide">Endereço fictício<input required name="address" autoComplete="street-address" placeholder="Ex.: Rua da Demonstração, 100…" /></label><label>Cidade<input required name="city" autoComplete="address-level2" placeholder="Ex.: São Paulo…" /></label><label>UF<select name="state" autoComplete="address-level1" defaultValue="SP"><option>SP</option><option>RJ</option><option>MG</option></select></label></div></div></section>
+          <section className="form-section"><span className="step-number">03</span><div><h2>Pagamento visual</h2><label className="mock-payment"><input type="radio" defaultChecked name="payment"/> Cartão fictício <span>•••• 4242</span></label></div></section>
+          <button className="primary-action" type="submit">Concluir demonstração <Icon name="arrow" /></button>
+        </form>
+        <aside className="summary"><p className="eyebrow">Sua escolha</p>{cart.items.map(item => <div className="checkout-item" key={item.id}><span>{item.quantity}× {item.title}{item.size ? ` · ${item.size}` : ""}{item.selectionContext && <small className="checkout-context">{item.selectionContext.label}: {item.selectionContext.preference}</small>}</span><strong>{money.format(item.unitPrice * item.quantity / 100)}</strong></div>)}<hr/><div className="summary__total"><span>Total demonstrativo</span><strong>{money.format(total / 100)}</strong></div></aside>
+      </div>
+    </main>
+  );
+}
+
+type ChatItem = {
+  role: "user" | "assistant";
+  content: string;
+  suggestedAction?: {
+    type: "select_size" | "view_product";
+    productId?: string;
+    size?: Size;
+    label?: string;
+  };
+};
+
+function MipoAtelierDrawer({
+  isOpen,
+  onClose,
+  currentProduct,
+  cart,
+  onSelectSize,
+  onSelectProduct,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  currentProduct: Product | null;
+  cart: Cart;
+  onSelectSize?: (size: Size) => void;
+  onSelectProduct?: (product: Product) => void;
+}) {
+  const [messages, setMessages] = useState<ChatItem[]>([
+    {
+      role: "assistant",
+      content: "Olá! Sou a MIPO Concierge do atelier Vértice. Posso te orientar sobre o caimento exato das peças, elasticidade dos tecidos (linho, tricot, lã fria), sugestões de combinações e cuidados de conservação. Em que posso te ajudar hoje?",
+    },
+  ]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [appliedSize, setAppliedSize] = useState<Size | null>(null);
+  const threadEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    threadEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, loading]);
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape" && isOpen) onClose();
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
+  if (!isOpen) return null;
+
+  async function handleSend(textToSend?: string) {
+    const text = (textToSend ?? input).trim();
+    if (!text || loading) return;
+
+    const userMessage: ChatItem = { role: "user", content: text };
+    const nextMessages = [...messages, userMessage];
+    setMessages(nextMessages);
+    setInput("");
+    setLoading(true);
+
+    try {
+      const response = await commerceApi.chat(
+        nextMessages.map((m) => ({ role: m.role, content: m.content })),
+        currentProduct,
+        cart.items
+      );
+
+      setMessages([
+        ...nextMessages,
+        {
+          role: "assistant",
+          content: response.reply,
+          suggestedAction: response.suggestedAction,
+        },
+      ]);
+    } catch {
+      setMessages([
+        ...nextMessages,
+        {
+          role: "assistant",
+          content: "Tive um pequeno contratempo de conexão com o atelier. No entanto, lembre-se: peças em linho puro não possuem elastano, enquanto nossos tricots possuem modelagem fluida e confortável.",
+        },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const chips = currentProduct
+    ? [
+        `Qual tamanho do ${currentProduct.title} é melhor para mim?`,
+        "O tecido tem elastano ou encolhe?",
+        `Com o que posso combinar o ${currentProduct.title}?`,
+        "Quais os cuidados recomendados de lavagem?",
+      ]
+    : [
+        "Como escolher meu tamanho ideal?",
+        "Quais peças combinam entre si?",
+        "Dúvidas sobre linho e tecidos naturais",
+      ];
+
+  return (
+    <>
+      <div className="mipo-drawer-backdrop" onClick={onClose} aria-hidden="true" />
+      <aside className="mipo-drawer" role="dialog" aria-label="MIPO Atelier Concierge">
+        <header className="mipo-drawer__header">
+          <div className="mipo-drawer__title-group">
+            <p>MIPO Concierge</p>
+            <h2>Atelier Vértice</h2>
+          </div>
+          <button className="mipo-drawer__close" onClick={onClose} aria-label="Fechar consultoria">
+            <Icon name="close" />
+          </button>
+        </header>
+
+        {currentProduct && (
+          <div className="mipo-drawer__context-strip">
+            <Icon name="spark" />
+            <span>Peça em análise: <strong>{currentProduct.title}</strong> ({currentProduct.category})</span>
+          </div>
+        )}
+
+        <div className="mipo-chat-thread">
+          {messages.map((msg, index) => (
+            <div key={index} className={`mipo-chat-bubble mipo-chat-bubble--${msg.role}`}>
+              <div className="mipo-bubble-meta">
+                {msg.role === "assistant" ? <><Icon name="spark" /> MIPO Concierge</> : "Você"}
+              </div>
+              <div className="mipo-bubble-body">
+                {msg.content}
+                {msg.suggestedAction?.type === "select_size" && msg.suggestedAction.size && onSelectSize && (
+                  <div>
+                    {appliedSize === msg.suggestedAction.size ? (
+                      <p className="mipo-suggestion-applied">✓ Tamanho {msg.suggestedAction.size} selecionado no atelier</p>
+                    ) : (
+                      <button
+                        type="button"
+                        className="mipo-suggestion-action"
+                        onClick={() => {
+                          if (msg.suggestedAction?.size) {
+                            onSelectSize(msg.suggestedAction.size);
+                            setAppliedSize(msg.suggestedAction.size);
+                          }
+                        }}
+                      >
+                        <Icon name="spark" />
+                        <span>Selecionar tamanho {msg.suggestedAction.size}</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+
+          {loading && (
+            <div className="mipo-chat-bubble mipo-chat-bubble--assistant">
+              <div className="mipo-typing">
+                <Icon name="spark" />
+                <span>MIPO está analisando o caimento...</span>
+              </div>
+            </div>
+          )}
+
+          <div ref={threadEndRef} />
+        </div>
+
+        <div className="mipo-drawer__footer">
+          <div className="mipo-chat-chips">
+            {chips.map((chip, idx) => (
+              <button
+                key={idx}
+                type="button"
+                className="mipo-chip"
+                disabled={loading}
+                onClick={() => void handleSend(chip)}
+              >
+                {chip}
+              </button>
+            ))}
+          </div>
+
+          <form
+            className="mipo-chat-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void handleSend();
+            }}
+          >
+            <input
+              type="text"
+              className="mipo-chat-input"
+              placeholder="Pergunte sobre medidas, caimento, combinações..."
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              disabled={loading}
+            />
+            <button type="submit" className="mipo-chat-send" disabled={!input.trim() || loading}>
+              Enviar
+            </button>
+          </form>
+        </div>
+      </aside>
+    </>
+  );
 }
 
 export function Storefront() {
@@ -321,32 +707,179 @@ export function Storefront() {
   const [serviceError, setServiceError] = useState("");
   const [catalogLoading, setCatalogLoading] = useState(persistent);
 
-  useEffect(() => { if (!persistent) { setCart(localCommerceRepository.getCart()); setCatalogLoading(false); return; } Promise.all([commerceApi.products(), commerceApi.cart()]).then(([catalog, savedCart]) => { const validCatalog = catalog.filter((product) => product.title && product.variants.length > 0); if (!validCatalog.length || validCatalog.length > maxStorefrontProducts) throw new Error(`Catálogo remoto fora do limite seguro (${validCatalog.length} produtos recebidos).`); setProducts(validCatalog); setCart(savedCart); if (validCatalog[0]) setActiveProduct(validCatalog[0]); }).catch((error) => setServiceError(error.message)).finally(() => setCatalogLoading(false)); }, [persistent]);
-  useEffect(() => { window.scrollTo({ top: 0, behavior: "smooth" }); }, [view, activeProduct]);
+  // MIPO Concierge State
+  const [isConciergeOpen, setIsConciergeOpen] = useState(false);
+  const [conciergeProductContext, setConciergeProductContext] = useState<Product | null>(null);
+  const [conciergeSuggestedSize, setConciergeSuggestedSize] = useState<Size | null>(null);
+
+  useEffect(() => {
+    if (!persistent) {
+      setCart(localCommerceRepository.getCart());
+      setCatalogLoading(false);
+      return;
+    }
+    Promise.all([commerceApi.products(), commerceApi.cart()])
+      .then(([catalog, savedCart]) => {
+        const validCatalog = catalog.filter((product) => product.title && product.variants.length > 0);
+        if (!validCatalog.length || validCatalog.length > maxStorefrontProducts) {
+          throw new Error(`Catálogo remoto fora do limite seguro (${validCatalog.length} produtos recebidos).`);
+        }
+        setProducts(validCatalog);
+        setCart(savedCart);
+        if (validCatalog[0]) setActiveProduct(validCatalog[0]);
+      })
+      .catch((error) => setServiceError(error.message))
+      .finally(() => setCatalogLoading(false));
+  }, [persistent]);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [view, activeProduct]);
+
   const cartCount = useMemo(() => cart.items.reduce((sum, item) => sum + item.quantity, 0), [cart]);
 
-  function openProduct(product: Product) { setActiveProduct(product); setView("product"); }
-  async function add(product: Product, variant: ProductVariant, decision?: "accepted" | "kept_original", selectionContext?: SelectionContext) {
-    const next = persistent ? await commerceApi.addItem(variant.id, 1, decision, selectionContext) : localCommerceRepository.addLineItem({ productId: product.id, variantId: variant.id, title: product.title, size: variant.size, quantity: 1, unitPrice: variant.price, color: product.color, mipoDecision: decision, selectionContext });
-    const isApparel = product.productKind === "apparel" || (!product.productKind && product.category !== "Maquiagem");
-    if (!decision && isApparel) recordMipoEvent({ productId: product.id, selectedVariantId: variant.id, risk: evaluateCheckoutRisk(product, variant).risk, decision: "not_required" });
-    setCart(next); setToast(`${product.title} foi para sua sacola.`); setTimeout(() => setToast(""), 2800); setView("cart");
+  function openProduct(product: Product) {
+    setActiveProduct(product);
+    setConciergeProductContext(product);
+    setConciergeSuggestedSize(null);
+    setView("product");
   }
-  async function changeQuantity(id:string, quantity:number) { setCart(persistent ? await commerceApi.updateItem(id, Math.max(1, quantity)) : localCommerceRepository.updateLineItem(id, quantity)); }
-  async function removeItem(id:string) { setCart(persistent ? await commerceApi.removeItem(id) : localCommerceRepository.removeLineItem(id)); }
-  async function finishDemo() { setCart(persistent ? await commerceApi.clearCart() : localCommerceRepository.clearCart()); setView("success"); }
 
-  return <div className="storefront">
-    <div className="demo-banner">Experiência demonstrativa · nenhum dado ou pagamento é processado</div>
-    <Header cartCount={cartCount} onNavigate={setView} />
-    {serviceError && <main className="service-error"><h1>Dados temporariamente indisponíveis</h1><p>{serviceError}</p><p>Verifique a configuração do Supabase. O modo local não é ativado silenciosamente.</p></main>}
-    {!serviceError && catalogLoading && <main className="service-loading" aria-live="polite"><p className="eyebrow">Seleção Vértice</p><h1>Preparando a coleção…</h1><p>Estamos carregando os produtos curados.</p></main>}
-    {!serviceError && !catalogLoading && view === "catalog" && <Catalog products={products} onProduct={openProduct} />}
-    {!serviceError && !catalogLoading && view === "product" && <ProductDetail product={activeProduct} persistent={persistent} onBack={() => setView("catalog")} onAdded={add} onAlternative={(id) => { const found = products.find(p => p.id === id); if (found) openProduct(found); }} />}
-    {!serviceError && !catalogLoading && view === "cart" && <CartView cart={cart} onQuantity={(id,quantity) => void changeQuantity(id,quantity)} onRemove={(id) => void removeItem(id)} onCheckout={() => setView("checkout")} onCatalog={() => setView("catalog")} />}
-    {!serviceError && !catalogLoading && view === "checkout" && <Checkout cart={cart} onBack={() => setView("cart")} onFinish={() => void finishDemo()} />}
-    {view === "success" && <main className="success-page"><p className="eyebrow">Demonstração concluída</p><span className="success-mark">✓</span><h1>Escolha registrada.<br/><em>Nenhuma compra foi realizada.</em></h1><p>O fluxo visual terminou aqui. Em uma integração real, o pedido seria criado pelo backend Medusa.</p><button className="primary-action" onClick={() => setView("catalog")}>Voltar à coleção <Icon name="arrow" /></button></main>}
-    {toast && <div className="toast" role="status">{toast}</div>}
-    <footer><div className="wordmark">VÉRTICE<span>atelier cotidiano</span></div><p>Uma demonstração de escolha assistida pelo MIPO. <a href="/painel">Painel MIPO →</a></p><p>© 2026 · Case EloGroup</p></footer>
-  </div>;
+  function handleOpenConcierge(product?: Product) {
+    setConciergeProductContext(product ?? (view === "product" ? activeProduct : null));
+    setIsConciergeOpen(true);
+  }
+
+  async function add(product: Product, variant: ProductVariant, decision?: "accepted" | "kept_original", selectionContext?: SelectionContext) {
+    const next = persistent
+      ? await commerceApi.addItem(variant.id, 1, decision, selectionContext)
+      : localCommerceRepository.addLineItem({
+          productId: product.id,
+          variantId: variant.id,
+          title: product.title,
+          size: variant.size,
+          quantity: 1,
+          unitPrice: variant.price,
+          color: product.color,
+          mipoDecision: decision,
+          selectionContext,
+        });
+    const isApparel = product.productKind === "apparel" || (!product.productKind && product.category !== "Maquiagem");
+    if (!decision && isApparel) {
+      recordMipoEvent({
+        productId: product.id,
+        selectedVariantId: variant.id,
+        risk: evaluateCheckoutRisk(product, variant).risk,
+        decision: "not_required",
+      });
+    }
+    setCart(next);
+    setToast(`${product.title} foi para sua sacola.`);
+    setTimeout(() => setToast(""), 2800);
+    setView("cart");
+  }
+
+  async function changeQuantity(id: string, quantity: number) {
+    setCart(persistent ? await commerceApi.updateItem(id, Math.max(1, quantity)) : localCommerceRepository.updateLineItem(id, quantity));
+  }
+
+  async function removeItem(id: string) {
+    setCart(persistent ? await commerceApi.removeItem(id) : localCommerceRepository.removeLineItem(id));
+  }
+
+  async function finishDemo() {
+    setCart(persistent ? await commerceApi.clearCart() : localCommerceRepository.clearCart());
+    setView("success");
+  }
+
+  return (
+    <div className="storefront">
+      <div className="demo-banner">Experiência demonstrativa · nenhum dado ou pagamento é processado</div>
+      <Header cartCount={cartCount} onNavigate={setView} />
+      {serviceError && (
+        <main className="service-error">
+          <h1>Dados temporariamente indisponíveis</h1>
+          <p>{serviceError}</p>
+          <p>Verifique a configuração do Supabase. O modo local não é ativado silenciosamente.</p>
+        </main>
+      )}
+      {!serviceError && catalogLoading && (
+        <main className="service-loading" aria-live="polite">
+          <p className="eyebrow">Seleção Vértice</p>
+          <h1>Preparando a coleção…</h1>
+          <p>Estamos carregando os produtos curados.</p>
+        </main>
+      )}
+      {!serviceError && !catalogLoading && view === "catalog" && (
+        <Catalog products={products} onProduct={openProduct} />
+      )}
+      {!serviceError && !catalogLoading && view === "product" && (
+        <ProductDetail
+          product={activeProduct}
+          persistent={persistent}
+          onBack={() => setView("catalog")}
+          onAdded={add}
+          onAlternative={(id) => {
+            const found = products.find((p) => p.id === id);
+            if (found) openProduct(found);
+          }}
+          onOpenConcierge={handleOpenConcierge}
+          suggestedSize={conciergeSuggestedSize}
+        />
+      )}
+      {!serviceError && !catalogLoading && view === "cart" && (
+        <CartView
+          cart={cart}
+          onQuantity={(id, quantity) => void changeQuantity(id, quantity)}
+          onRemove={(id) => void removeItem(id)}
+          onCheckout={() => setView("checkout")}
+          onCatalog={() => setView("catalog")}
+          onOpenConcierge={() => handleOpenConcierge()}
+        />
+      )}
+      {!serviceError && !catalogLoading && view === "checkout" && (
+        <Checkout cart={cart} onBack={() => setView("cart")} onFinish={() => void finishDemo()} />
+      )}
+      {view === "success" && (
+        <main className="success-page">
+          <p className="eyebrow">Demonstração concluída</p>
+          <span className="success-mark">✓</span>
+          <h1>Escolha registrada.<br /><em>Nenhuma compra foi realizada.</em></h1>
+          <p>O fluxo visual terminou aqui. Em uma integração real, o pedido seria criado pelo backend Medusa.</p>
+          <button className="primary-action" onClick={() => setView("catalog")}>Voltar à coleção <Icon name="arrow" /></button>
+        </main>
+      )}
+
+      {/* Floating MIPO Atelier Trigger Button */}
+      <button
+        className="mipo-floating-trigger"
+        onClick={() => handleOpenConcierge()}
+        aria-label="Abrir consultoria MIPO Atelier"
+      >
+        <span className="mipo-floating-trigger__spark"><Icon name="spark" /></span>
+        <span className="mipo-floating-trigger__label">MIPO Atelier <em>· Consultoria</em></span>
+      </button>
+
+      {/* MIPO Atelier Slide-out Drawer */}
+      <MipoAtelierDrawer
+        isOpen={isConciergeOpen}
+        onClose={() => setIsConciergeOpen(false)}
+        currentProduct={conciergeProductContext}
+        cart={cart}
+        onSelectSize={(size) => {
+          setConciergeSuggestedSize(size);
+          setToast(`Tamanho ${size} selecionado para ${conciergeProductContext?.title ?? "o produto"}.`);
+          setTimeout(() => setToast(""), 3000);
+        }}
+        onSelectProduct={(prod) => openProduct(prod)}
+      />
+
+      {toast && <div className="toast" role="status">{toast}</div>}
+      <footer>
+        <div className="wordmark">VÉRTICE<span>atelier cotidiano</span></div>
+        <p>Uma demonstração de escolha assistida pelo MIPO. <a href="/painel">Painel MIPO →</a></p>
+        <p>© 2026 · Case EloGroup</p>
+      </footer>
+    </div>
+  );
 }
