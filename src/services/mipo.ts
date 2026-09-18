@@ -50,12 +50,7 @@ export function evaluateCheckoutRisk(product: Product, selected: ProductVariant,
   if (!selected.size) return { risk: "none", outcome: "good_match", level: "low", score: 0, evidenceCoverage: 0, evidence: "Esta variação não possui grade de tamanho; a assistência de caimento não se aplica.", message: "Escolha a variação que combina com você." };
   const selectedSize = selected.size;
   const usualVariant = usualSize ? product.variants.find((variant) => variant.size === usualSize) : undefined;
-  if (usualVariant && usualSize !== selectedSize) return {
-    risk: "size", outcome: "attention", level: "medium", score: 65, evidenceCoverage: 0.75,
-    evidence: `Você informou que costuma usar ${usualSize}, mas selecionou ${selectedSize}. A comparação considera sua preferência declarada e o histórico das variantes.`,
-    message: `Você costuma usar ${usualSize}. Vale comparar esse tamanho antes de finalizar para manter sua referência habitual.`,
-    recommendedVariant: usualVariant,
-  };
+
   const betterSize = product.variants
     .filter((variant): variant is ProductVariant & { size: Size } => Boolean(variant.size))
     .filter((variant) => (variant.salesCount ?? 0) >= thresholds.minimumSampleSize)
@@ -64,17 +59,101 @@ export function evaluateCheckoutRisk(product: Product, selected: ProductVariant,
     .sort((a, b) => a.returnRate - b.returnRate)[0];
   const score = scoreRisk(selected, betterSize, thresholds);
 
+  if (selected.defectRate >= 0.1 && product.alternativeProductId) {
+    return {
+      risk: "quality",
+      outcome: "attention",
+      level: "high",
+      score: score.score,
+      evidenceCoverage: score.coverage,
+      evidence: `${Math.round(selected.defectRate * 100)}% de ocorrências de qualidade observadas nesta variação.`,
+      message: "Encontramos uma alternativa de construção semelhante e menor incidência observada.",
+      alternativeProductId: product.alternativeProductId,
+    };
+  }
+
   if (selected.returnRate >= thresholds.highReturnRate && (selected.salesCount ?? 0) >= thresholds.minimumSampleSize && betterSize) {
+    const isUsualSameAsSelected = Boolean(usualSize && usualSize === selectedSize);
     return {
       risk: "size",
       outcome: "attention",
       level: "high",
       score: score.score,
       evidenceCoverage: score.coverage,
-      evidence: selected.evidenceOrigin === "synthetic" ? `Cenário demonstrativo: ${Math.round(selected.returnRate * 100)}% nesta variação e ${Math.round(betterSize.returnRate * 100)}% no ${betterSize.size}.` : `${Math.round(selected.returnRate * 100)}% de devoluções observadas nesta variação; ${Math.round(betterSize.returnRate * 100)}% no ${betterSize.size}.`,
-      message: `Considerando o cenário e sua preferência de caimento, o tamanho ${betterSize.size} pode oferecer um ajuste melhor.`,
+      evidence: selected.evidenceOrigin === "synthetic"
+        ? `Cenário demonstrativo: ${Math.round(selected.returnRate * 100)}% nesta variação e ${Math.round(betterSize.returnRate * 100)}% no ${betterSize.size}.`
+        : `${Math.round(selected.returnRate * 100)}% de devoluções observadas nesta variação; ${Math.round(betterSize.returnRate * 100)}% no ${betterSize.size}.`,
+      message: isUsualSameAsSelected
+        ? `Mesmo sendo seu tamanho habitual (${usualSize}), esta modelagem apresenta alta taxa de devoluções (${Math.round(selected.returnRate * 100)}%). O tamanho ${betterSize.size} oferece ajuste superior.`
+        : `Considerando o histórico da peça e sua preferência de caimento, o tamanho ${betterSize.size} oferece um ajuste melhor do que o ${selectedSize}.`,
       recommendedVariant: betterSize,
     };
+  }
+
+  // Nuanced evaluation when usualSize is informed
+  if (usualSize && usualVariant) {
+    const sizeDiff = sizeOrder[selectedSize] - sizeOrder[usualSize];
+
+    // Intentional size-up (loose fit preference OR avoiding high returns on usualSize)
+    const intentionalSizeUp = sizeDiff > 0 && (fitPreference === "loose" || usualVariant.returnRate >= thresholds.highReturnRate);
+    if (intentionalSizeUp) {
+      return {
+        risk: "none",
+        outcome: "good_match",
+        level: "low",
+        score: Math.max(score.score, 88),
+        evidenceCoverage: Math.max(score.coverage, 0.8),
+        evidence: `Você costuma usar ${usualSize}, mas selecionou ${selectedSize} alinhado à busca por maior fluidez e às proporções da peça.`,
+        message: usualVariant.returnRate >= thresholds.highReturnRate
+          ? `Ótima decisão: embora você costume vestir ${usualSize}, este modelo tem maior histórico de trocas no ${usualSize}. O tamanho ${selectedSize} garante caimento sem aperto.`
+          : `Escolha alinhada: você costuma usar ${usualSize} e prefere caimento mais solto. O tamanho ${selectedSize} entrega a silhueta relaxada desejada.`,
+      };
+    }
+
+    // Intentional size-down (fitted preference)
+    const intentionalSizeDown = sizeDiff < 0 && fitPreference === "fitted";
+    if (intentionalSizeDown) {
+      return {
+        risk: "none",
+        outcome: "good_match",
+        level: "low",
+        score: Math.max(score.score, 88),
+        evidenceCoverage: Math.max(score.coverage, 0.8),
+        evidence: `Você costuma usar ${usualSize}, mas escolheu ${selectedSize} para obter um visual mais ajustado ao corpo.`,
+        message: `Escolha intencional: como você busca caimento ajustado, optar pelo ${selectedSize} em vez do ${usualSize} proporciona a linha precisa desejada.`,
+      };
+    }
+
+    // Sizes match perfectly
+    if (selectedSize === usualSize) {
+      const fitLabel = fitPreference === "fitted" ? "mais ajustado" : fitPreference === "loose" ? "mais solto" : "regular";
+      return {
+        risk: "none",
+        outcome: "good_match",
+        level: "low",
+        score: Math.max(score.score, 92),
+        evidenceCoverage: Math.max(score.coverage, 0.85),
+        evidence: `Tamanho selecionado (${selectedSize}) alinhado ao seu tamanho habitual (${usualSize}); histórico de satisfação de ${Math.round((1 - selected.returnRate) * 100)}%.`,
+        message: fitPreference === "regular"
+          ? `Excelente escolha: o tamanho ${selectedSize} corresponde à sua referência habitual e a modelagem é consistente e fiel às medidas.`
+          : `Tamanho habitual ${selectedSize} confirmado com preferência ${fitLabel}. A peça respeita suas proporções.`,
+      };
+    }
+
+    // Genuine unaligned divergence (e.g. regular fit, but user picked a different size)
+    if (Math.abs(sizeDiff) >= 1) {
+      const direction = sizeDiff > 0 ? "maior" : "menor";
+      return {
+        risk: "size",
+        outcome: "attention",
+        level: "medium",
+        score: 65,
+        evidenceCoverage: 0.75,
+        evidence: `Você informou tamanho habitual ${usualSize}, mas selecionou ${selectedSize} (1 número ${direction}) com preferência regular.`,
+        message: `Você costuma usar ${usualSize}, mas selecionou ${selectedSize}. Se desejar o caimento padrão da peça, o tamanho ${usualSize} é sua referência mais segura.`,
+        recommendedVariant: usualVariant,
+      };
+    }
   }
 
   const provisionalAlternative = product.variants.some((variant) =>
@@ -92,26 +171,13 @@ export function evaluateCheckoutRisk(product: Product, selected: ProductVariant,
     };
   }
 
-  if (selected.defectRate >= 0.1 && product.alternativeProductId) {
-    return {
-      risk: "quality",
-      outcome: "attention",
-      level: "high",
-      score: score.score,
-      evidenceCoverage: score.coverage,
-      evidence: `${Math.round(selected.defectRate * 100)}% de ocorrências de qualidade observadas nesta variação.`,
-      message: "Encontramos uma alternativa de construção semelhante e menor incidência observada.",
-      alternativeProductId: product.alternativeProductId,
-    };
-  }
-
   return {
     risk: "none",
     outcome: "good_match",
     level: "low",
     score: score.score,
     evidenceCoverage: score.coverage,
-    evidence: "Não identificamos uma alternativa claramente melhor com os dados disponíveis.",
+    evidence: "Não identificamos necessidade de alteração com os dados disponíveis.",
     message: "Sua escolha está alinhada ao histórico observado deste produto.",
   };
 }

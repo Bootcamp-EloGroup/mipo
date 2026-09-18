@@ -189,6 +189,9 @@ export async function explainFitDecision(
   result: RiskResult,
   usualSize?: Size | null
 ): Promise<{ message: string; provider: "eloagents" | "deterministic"; model: string }> {
+  const isUsualMatch = Boolean(usualSize && usualSize === selected.size);
+  const sizeDifference = usualSize && selected.size ? `${usualSize} habitual vs ${selected.size} selecionado` : "não informado";
+
   const promptMessages: ChatMessage[] = [
     {
       role: "user",
@@ -198,19 +201,20 @@ Sua tarefa é escrever a explicação de caimento para o card de assistência na
 REGRAS RÍGIDAS:
 - Responda DIRETAMENTE com a explicação final, em no máximo 2 frases elegantes e objetivas (máximo 280 caracteres).
 - NÃO inclua introduções como "Claro", "Aqui está", nem saudações, nem perguntas no final.
-- Mencione a relação entre o caimento do tecido (${product.title}) e a recomendação.
-- Se houver recomendação alternativa (tamanho ${result.recommendedVariant?.size ?? "nenhum"}), explique o motivo da troca.
+- Se o tamanho selecionado (${selected.size}) for IGUAL ao habitual (${usualSize}), valide a escolha destacando como a fibra e o corte da peça comportam as medidas.
+- Se o tamanho divergir do habitual mas for INTENCIONAL (ex: preferência de caimento ${fitPreference}, ou peça sem elastano que veste melhor um número acima), valide e elogie a escolha consciente!
+- NÃO conteste a escolha apenas porque os tamanhos diferem: analise a intenção e a fibra do tecido.
+- Se houver recomendação alternativa (tamanho ${result.recommendedVariant?.size ?? "nenhum"}), fundamente com base nas devoluções reais e modelagem.
 
 Catálogo:
 ${CATALOG_KNOWLEDGE}]
 
 Dados da Escolha:
 Peça: ${product.title} (${product.category})
-Variação: ${selected.size ?? selected.title} (taxa de devolução: ${Math.round(selected.returnRate * 100)}%)
-Tamanho usual: ${usualSize ?? "não informado"}
+Variação selecionada: ${selected.size ?? selected.title} (taxa de devolução: ${Math.round(selected.returnRate * 100)}%)
+Tamanho habitual informado: ${usualSize ?? "não informado"} (${isUsualMatch ? "idêntico ao selecionado" : sizeDifference})
 Caimento desejado: ${fitPreference === "fitted" ? "mais ajustado" : fitPreference === "loose" ? "mais solto" : "regular"}
-Risco MIPO: ${result.risk} (Score: ${result.score})
-Alternativa indicada: ${result.recommendedVariant?.size ?? "manter escolha"}
+Avaliação determinística: ${result.message}
 Evidência técnica: ${result.evidence}`,
     },
   ];
