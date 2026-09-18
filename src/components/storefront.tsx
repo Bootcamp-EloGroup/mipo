@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { products as localProducts } from "@/src/data/products";
-import type { Cart, Product, ProductVariant } from "@/src/domain/commerce";
+import type { Cart, Product, ProductVariant, SelectionContext } from "@/src/domain/commerce";
 import { localCommerceRepository, recordMipoEvent } from "@/src/services/local-commerce";
 import { commerceApi } from "@/src/services/commerce-api";
-import { evaluateCheckoutRisk, type RiskResult } from "@/src/services/mipo";
+import { evaluateCheckoutRisk, evaluateSelectionContext, type RiskResult } from "@/src/services/mipo";
+import { productQuestions } from "@/src/services/product-profile";
 
 type View = "catalog" | "product" | "cart" | "checkout" | "success";
 
@@ -25,15 +26,81 @@ function Icon({ name }: { name: "bag" | "arrow" | "spark" | "close" | "minus" | 
   return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">{paths[name]}</svg>;
 }
 
+function resolveProductImage(product: Product): string {
+  const productImages: Record<string, string> = {
+    aurora: "/images/products/vestido-aurora.jpg",
+    sereno: "/images/products/vestido-sereno.jpg",
+    trama: "/images/products/blusa-trama.jpg",
+    eixo: "/images/products/calca-eixo.jpg",
+    lume: "/images/products/jaqueta-lume.jpg",
+    orbita: "/images/products/casaco-orbita.jpg",
+    bruma: "/images/products/blush-bruma.jpg",
+    luz: "/images/products/balm-luz.jpg",
+    brinco: "/images/products/brinco-artesanal.jpg",
+    caderno: "/images/products/caderno-artesanal.jpg",
+  };
+  const ecommerceImages: Record<string, string> = {
+    apparel: "/images/products/ecommerce-apparel.png",
+    beauty: "/images/products/ecommerce-beauty.png",
+    accessory: "/images/products/ecommerce-accessories.png",
+    lifestyle: "/images/products/ecommerce-lifestyle.png",
+  };
+
+  if (product.imageKey && productImages[product.imageKey]) {
+    return productImages[product.imageKey];
+  }
+
+  const text = `${product.title} ${product.subtitle ?? ""} ${product.subcategory ?? ""} ${product.category ?? ""}`.toLowerCase();
+  if (text.includes("vestido")) {
+    return text.includes("sereno") || text.includes("azul") ? productImages.sereno : productImages.aurora;
+  }
+  if (text.includes("blusa") || text.includes("camisa") || text.includes("tricô") || text.includes("trico") || text.includes("top")) {
+    return productImages.trama;
+  }
+  if (text.includes("calça") || text.includes("calca") || text.includes("saia")) {
+    return productImages.eixo;
+  }
+  if (text.includes("jaqueta")) {
+    return productImages.lume;
+  }
+  if (text.includes("casaco") || text.includes("moletom")) {
+    return productImages.orbita;
+  }
+  if (text.includes("blush")) {
+    return productImages.bruma;
+  }
+  if (text.includes("balm") || text.includes("batom") || text.includes("lábio") || text.includes("labio")) {
+    return productImages.luz;
+  }
+  if (text.includes("brinco")) {
+    return productImages.brinco;
+  }
+  if (text.includes("caderno") || text.includes("almofada")) {
+    return productImages.caderno;
+  }
+
+  const productKind = product.productKind ?? (product.category === "Maquiagem" || product.category === "Beleza" ? "beauty" : product.category === "Acessórios" ? "accessory" : product.category === "Lifestyle" ? "lifestyle" : "apparel");
+  return ecommerceImages[productKind] ?? ecommerceImages.apparel;
+}
+
 function ProductArt({ product, hero = false }: { product: Product; hero?: boolean }) {
-  const isWarm = product.imageKey === "sand" || ["prod_aurora", "prod_trama", "prod_eixo"].includes(product.id);
-  const image = isWarm ? "/images/vertice-sand.webp" : "/images/vertice-charcoal.webp";
+  const image = resolveProductImage(product);
   return (
-    <div className={`product-art ${hero ? "product-art--hero" : ""}`} style={{ "--tone": product.color } as React.CSSProperties}>
-      <Image src={image} alt={`Modelo vestindo ${product.title}`} fill sizes={hero ? "(max-width: 800px) 100vw, 55vw" : "(max-width: 480px) 100vw, (max-width: 900px) 50vw, 33vw"} className="product-photo" priority={hero} />
+    <div className={`product-art ${hero ? "product-art--hero" : ""} ${product.productKind === "beauty" ? "product-art--beauty" : ""}`} style={{ "--tone": product.color } as React.CSSProperties}>
+      <Image src={image} alt={`${product.title} — ${product.subtitle}`} fill sizes={hero ? "(max-width: 800px) 100vw, 55vw" : "(max-width: 480px) 100vw, (max-width: 900px) 50vw, 33vw"} className="product-photo" priority={hero} />
       <span className="product-art__color" aria-hidden="true" />
     </div>
   );
+}
+
+function variantLabel(product: Product, variant: ProductVariant, index: number): string {
+  if (variant.size || product.productKind === "apparel" || (!product.productKind && product.category !== "Maquiagem")) return variant.size ?? `Tamanho ${index + 1}`;
+  const technicalTitle = !variant.title || variant.title === variant.sku || /^sku[-_]/i.test(variant.title);
+  if (variant.title && !technicalTitle) return variant.title;
+  if (product.productKind === "beauty" || product.variantAttribute === "shade") return `Tom ${index + 1}`;
+  if (product.variantAttribute === "color") return `Cor ${index + 1}`;
+  if (product.variantAttribute === "volume") return `Volume ${index + 1}`;
+  return `Opção ${index + 1}`;
 }
 
 function Header({ cartCount, onNavigate }: { cartCount: number; onNavigate: (view: View) => void }) {
@@ -54,9 +121,17 @@ function Header({ cartCount, onNavigate }: { cartCount: number; onNavigate: (vie
 }
 
 function Catalog({ products, onProduct }: { products: Product[]; onProduct: (product: Product) => void }) {
-  const [category, setCategory] = useState("Todos");
-  const categories = ["Todos", ...new Set(products.map((product) => product.subcategory ?? product.category))];
-  const visibleProducts = category === "Todos" ? products : products.filter((product) => (product.subcategory ?? product.category) === category);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [page, setPage] = useState(1);
+  const pageSize = 6;
+  const categories = [...new Set(products.map((product) => product.category))].sort();
+  const visibleProducts = selectedCategories.length === 0 ? products : products.filter((product) => selectedCategories.includes(product.category));
+  const pageCount = Math.max(1, Math.ceil(visibleProducts.length / pageSize));
+  const pageProducts = visibleProducts.slice((page - 1) * pageSize, page * pageSize);
+  useEffect(() => { setPage((current) => Math.min(current, pageCount)); }, [pageCount]);
+  function toggleCategory(category: string) { setPage(1); setSelectedCategories((current) => current.includes(category) ? current.filter((item) => item !== category) : [...current, category]); }
+  function clearFilters() { setSelectedCategories([]); setPage(1); }
   return (
     <main id="conteudo">
       <section className="hero">
@@ -70,9 +145,9 @@ function Catalog({ products, onProduct }: { products: Product[]; onProduct: (pro
       </section>
 
       <section className="collection" id="colecao">
-        <div className="section-heading"><div><p className="eyebrow">Seleção Vértice</p><h2>Novidades da coleção</h2></div><div className="category-pills" aria-label="Filtrar por categoria">{categories.map((item) => <button key={item} className={category === item ? "active" : ""} aria-pressed={category === item} onClick={() => setCategory(item)}>{item}</button>)}</div></div>
+        <div className="section-heading"><div><p className="eyebrow">Seleção Vértice</p><h2>Novidades da coleção</h2></div><div className="catalog-filter"><button type="button" className="filter-trigger" aria-expanded={filtersOpen} aria-controls="category-filter" onClick={() => setFiltersOpen((open) => !open)}><span>Filtrar produtos</span><b>{selectedCategories.length ? `${selectedCategories.length} selecionada${selectedCategories.length > 1 ? "s" : ""}` : "Todos"}</b><span aria-hidden="true">⌄</span></button>{filtersOpen&&<div id="category-filter" className="filter-menu" role="group" aria-label="Categorias de produtos"><label><input type="checkbox" checked={selectedCategories.length === 0} onChange={clearFilters} /> Todos os produtos</label>{categories.map((item) => <label key={item}><input type="checkbox" checked={selectedCategories.includes(item)} onChange={() => toggleCategory(item)} /> {item}</label>)}<button type="button" className="filter-clear" onClick={clearFilters}>Limpar filtros</button></div>}</div></div>
         <div className="product-grid">
-          {visibleProducts.map((product, index) => (
+          {pageProducts.map((product, index) => (
             <article className={`product-card reveal reveal--${index % 3}`} key={product.id}>
               <button className="product-card__visual" onClick={() => onProduct(product)} aria-label={`Ver ${product.title}`}>
                 {product.badge && <span className="badge">{product.badge}</span>}
@@ -86,17 +161,24 @@ function Catalog({ products, onProduct }: { products: Product[]; onProduct: (pro
             </article>
           ))}
         </div>
+        <nav className="catalog-pagination" aria-label="Paginação do catálogo">
+          <button type="button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page === 1}>Anterior</button>
+          <div>{Array.from({ length: pageCount }, (_, index) => index + 1).map((item) => <button type="button" key={item} className={page === item ? "active" : ""} aria-current={page === item ? "page" : undefined} onClick={() => setPage(item)}>{item}</button>)}</div>
+          <button type="button" onClick={() => setPage((current) => Math.min(pageCount, current + 1))} disabled={page === pageCount}>Próxima</button>
+        </nav>
       </section>
     </main>
   );
 }
 
-function ProductDetail({ product, persistent, onBack, onAdded, onAlternative }: { product: Product; persistent: boolean; onBack: () => void; onAdded: (product: Product, variant: ProductVariant, decision?: "accepted" | "kept_original") => void | Promise<void>; onAlternative: (id: string) => void }) {
+function ProductDetail({ product, persistent, onBack, onAdded, onAlternative }: { product: Product; persistent: boolean; onBack: () => void; onAdded: (product: Product, variant: ProductVariant, decision?: "accepted" | "kept_original", selectionContext?: SelectionContext) => void | Promise<void>; onAlternative: (id: string) => void }) {
   const [selected, setSelected] = useState<ProductVariant | null>(null);
   const [decision, setDecision] = useState<"accepted" | "kept_original" | undefined>();
   const [result, setResult] = useState<RiskResult | null>(null);
   const [interventionId, setInterventionId] = useState<string>();
   const [fitPreference, setFitPreference] = useState<"fitted" | "regular" | "loose">("regular");
+  const [usualSize, setUsualSize] = useState<ProductVariant["size"]>(null);
+  const [selectionContext, setSelectionContext] = useState<SelectionContext>();
   const [evaluating, setEvaluating] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiAssisted, setAiAssisted] = useState(false);
@@ -105,9 +187,9 @@ function ProductDetail({ product, persistent, onBack, onAdded, onAlternative }: 
   const decisionRef = useRef<typeof decision>(undefined);
   const sizePickerRef = useRef<HTMLFieldSetElement>(null);
 
-  async function choose(variant: ProductVariant, fit = fitPreference) {
+  async function choose(variant: ProductVariant, fit = fitPreference, userSize = usualSize) {
     setSelected(variant); setDecision(undefined); decisionRef.current=undefined; setEvaluating(true); setAiAssisted(false); setAiLoading(false);
-    try { if (persistent) { const response = await commerceApi.evaluate(product.id, variant.id, fit); setResult(response.result); setInterventionId(response.interventionId); activeIntervention.current=response.interventionId; setAiLoading(true); void commerceApi.explain(response.interventionId).then((explanation)=>{if(explanation.enabled&&explanation.answer&&activeIntervention.current===response.interventionId&&!decisionRef.current){setResult((current)=>current?{...current,message:explanation.answer!.message}:current);setAiAssisted(explanation.answer.provider!=="deterministic");}}).catch(()=>{}).finally(()=>{if(activeIntervention.current===response.interventionId)setAiLoading(false);}); } else { setResult(evaluateCheckoutRisk(product, variant, fit)); setInterventionId(undefined); activeIntervention.current=undefined; } }
+    try { if (!isApparel && (!selectionContext || Object.keys(selectionContext.answers ?? {}).length < productQuestions(product).length)) { setResult(null); setInterventionId(undefined); activeIntervention.current=undefined; return; } if (persistent) { const response = await commerceApi.evaluate(product.id, variant.id, fit, isApparel ? undefined : selectionContext, userSize); setResult(response.result); setInterventionId(response.interventionId); activeIntervention.current=response.interventionId; setAiLoading(true); void commerceApi.explain(response.interventionId).then((explanation)=>{if(explanation.enabled&&explanation.answer&&activeIntervention.current===response.interventionId&&!decisionRef.current){setResult((current)=>current?{...current,message:explanation.answer!.message}:current);setAiAssisted(explanation.answer.provider!=="deterministic");}}).catch(()=>{}).finally(()=>{if(activeIntervention.current===response.interventionId)setAiLoading(false);}); } else { setResult(selectionContext ? evaluateSelectionContext(product, variant, selectionContext) : evaluateCheckoutRisk(product, variant, fit, undefined, userSize)); setInterventionId(undefined); activeIntervention.current=undefined; } }
     finally { setEvaluating(false); }
   }
 
@@ -134,18 +216,14 @@ function ProductDetail({ product, persistent, onBack, onAdded, onAlternative }: 
       else recordMipoEvent({ productId: product.id, selectedVariantId: selected.id, risk: result.risk, decision: "kept_original" });
       setDecision("kept_original");
       decisionRef.current="kept_original";
-      await onAdded(product, selected, "kept_original");
+      await onAdded(product, selected, "kept_original", selectionContext);
     } finally { setDecisionLoading(false); }
   }
 
-  function chooseAnotherSize() {
-    const alternative=product.variants.find((variant)=>variant.id!==selected?.id&&(variant.inventory_quantity??0)>0);
-    sizePickerRef.current?.scrollIntoView({behavior:"smooth",block:"center"});
-    if(alternative) window.setTimeout(()=>document.getElementById(`size-${alternative.id}`)?.focus(),250);
-  }
-
-  const stockNeedsDecision=Boolean(selected&&result?.risk==="stock"&&(selected.inventory_quantity??0)>0&&!decision);
-  const requiresDecision=Boolean(result&&result.risk!=="none"&&!decision&&(result.recommendedVariant||result.alternativeProductId||stockNeedsDecision));
+  const isApparel = product.productKind === "apparel" || (!product.productKind && product.category !== "Maquiagem");
+  const contextualQuestions = isApparel ? [] : productQuestions(product);
+  const selectedLabel = selected ? variantLabel(product, selected, product.variants.findIndex((variant) => variant.id === selected.id)) : "selecione";
+  const requiresDecision=Boolean(result&&result.risk!=="none"&&!decision&&(result.recommendedVariant||result.alternativeProductId));
 
   return (
     <main className="detail-page">
@@ -160,11 +238,13 @@ function ProductDetail({ product, persistent, onBack, onAdded, onAlternative }: 
           <p className="description">{product.description}</p>
 
           <fieldset className="size-picker" ref={sizePickerRef}>
-            <legend><span>Tamanho: <b>{selected?.size ?? "selecione"}</b></span><button type="button">Guia de medidas</button></legend>
-            <div>{product.variants.map((variant) => { const soldOut=(variant.inventory_quantity??0)===0; return <button id={`size-${variant.id}`} type="button" className={selected?.id === variant.id ? "selected" : ""} onClick={() => choose(variant)} key={variant.id} aria-label={`${variant.size}${soldOut?", esgotado":""}`}>{variant.size}{soldOut&&<small>Esgotado</small>}</button>; })}</div>
+            <legend><span>{isApparel ? "Tamanho" : product.variantAttribute === "shade" ? "Tom" : "Variação"}: <b>{selectedLabel}</b></span>{isApparel&&<button type="button">Guia de medidas</button>}</legend>
+            <div>{product.variants.map((variant, index) => <button id={`size-${variant.id}`} type="button" className={selected?.id === variant.id ? "selected" : ""} onClick={() => choose(variant)} key={variant.id}>{variantLabel(product, variant, index)}</button>)}</div>
           </fieldset>
 
-          <fieldset className="fit-picker"><legend>Como você prefere o caimento?</legend><div>{([["fitted","Mais ajustado"],["regular","Regular"],["loose","Mais solto"]] as const).map(([value,label]) => <button type="button" key={value} aria-pressed={fitPreference === value} className={fitPreference === value ? "selected" : ""} onClick={() => { setFitPreference(value); if (selected) void choose(selected, value); }}>{label}</button>)}</div><small>Preferência opcional usada apenas neste cenário demonstrativo.</small></fieldset>
+          {isApparel&&<><fieldset className="fit-picker"><legend>Qual tamanho você costuma usar?</legend><div>{(["P","M","G","GG"] as const).map((value) => <button type="button" key={value} aria-pressed={usualSize === value} className={usualSize === value ? "selected" : ""} onClick={() => { setUsualSize(value); if (selected) void choose(selected, fitPreference, value); }}>{value}</button>)}</div><small>Essa resposta ajuda a contextualizar sua escolha, sem determinar o tamanho por você.</small></fieldset><fieldset className="fit-picker"><legend>Como você prefere o caimento?</legend><div>{([["fitted","Mais ajustado"],["regular","Regular"],["loose","Mais solto"]] as const).map(([value,label]) => <button type="button" key={value} aria-pressed={fitPreference === value} className={fitPreference === value ? "selected" : ""} onClick={() => { setFitPreference(value); if (selected) void choose(selected, value); }}>{label}</button>)}</div><small>Usamos essa preferência para comparar o histórico de tamanho.</small></fieldset></>}
+          {!isApparel && contextualQuestions.map((question) => <fieldset className="fit-picker" key={question.id}><legend>{question.label}</legend><div>{question.options.map((option) => <button type="button" key={option} aria-pressed={selectionContext?.answers?.[question.id] === option} className={selectionContext?.answers?.[question.id] === option ? "selected" : ""} onClick={() => { const answers = { ...(selectionContext?.answers ?? {}), [question.id]: option }; const first = Object.values(answers)[0] ?? option; setSelectionContext({ label: "Preferências do produto", preference: first, answers }); setResult(null); setInterventionId(undefined); activeIntervention.current=undefined; }}>{option}</button>)}</div></fieldset>)}
+          {!isApparel && selected && selectionContext && Object.keys(selectionContext.answers ?? {}).length === contextualQuestions.length && !result && <button type="button" className="agent-continue" disabled={evaluating} onClick={() => void choose(selected)}>{evaluating ? "Consultando o agente…" : "Pedir orientação ao agente"}<Icon name="spark" /></button>}
 
           {evaluating && <p className="mipo-loading" role="status">Analisando sua escolha…</p>}
           {selected && result && !evaluating && (
@@ -181,17 +261,13 @@ function ProductDetail({ product, persistent, onBack, onAdded, onAlternative }: 
                   {result.alternativeProductId && <button type="button" onClick={() => onAlternative(result.alternativeProductId!)}>Ver alternativa</button>}
                   <button type="button" className="quiet" onClick={keepOriginal}>Manter minha escolha</button>
                 </div>}
-                {stockNeedsDecision&&<div className="mipo-actions mipo-actions--stock">
-                  <button type="button" disabled={decisionLoading} onClick={continueWithSelection}>{decisionLoading?"Registrando escolha…":`Continuar com ${selected.size}`}</button>
-                  <button type="button" className="quiet" disabled={decisionLoading} onClick={chooseAnotherSize}>Escolher outro tamanho</button>
-                </div>}
                 {decision && <p className="decision-note">✓ Decisão registrada: {decision === "accepted" ? "recomendação aceita" : "escolha original mantida"}.</p>}
               </div>
             </aside>
           )}
 
-          <button className="primary-action" disabled={!selected || (selected.inventory_quantity??0)===0 || evaluating || decisionLoading || requiresDecision} onClick={async () => { if (!selected) return; if (persistent && interventionId && !result?.recommendedVariant && !result?.alternativeProductId) await commerceApi.decide(interventionId, "not_required"); await onAdded(product, selected, decision); }}>
-            <span>{selected&&(selected.inventory_quantity??0)===0?"Tamanho esgotado":"Adicionar à sacola"}</span><Icon name="arrow" />
+          <button className="primary-action" disabled={!selected || evaluating || decisionLoading || requiresDecision || (!isApparel && Object.keys(selectionContext?.answers ?? {}).length < contextualQuestions.length)} onClick={async () => { if (!selected) return; if (persistent && interventionId && !result?.recommendedVariant && !result?.alternativeProductId) await commerceApi.decide(interventionId, "not_required"); await onAdded(product, selected, decision, selectionContext); }}>
+            <span>Adicionar à sacola</span><Icon name="arrow" />
           </button>
           <div className="detail-notes"><span>Frete grátis acima de R$ 500</span><span>Troca em até 30 dias</span></div>
         </section>
@@ -207,7 +283,7 @@ function CartView({ cart, onQuantity, onRemove, onCheckout, onCatalog }: { cart:
     {cart.items.length === 0 ? <div className="empty-state"><h2>Sua sacola espera por boas escolhas.</h2><button className="primary-action" onClick={onCatalog}>Explorar coleção <Icon name="arrow" /></button></div> : <div className="cart-layout">
       <section className="cart-lines">{cart.items.map((item) => <article className="cart-line" key={item.id}>
         <div className="cart-swatch" style={{ background: item.color }} />
-        <div className="cart-line__copy"><p className="eyebrow">Vértice · edição 06</p><h2>{item.title}</h2><p>Tamanho {item.size}</p>{item.mipoDecision && <small><Icon name="spark" /> {item.mipoDecision === "accepted" ? "Tamanho escolhido com assistência MIPO" : "Escolha pessoal mantida"}</small>}</div>
+        <div className="cart-line__copy"><p className="eyebrow">Vértice · edição 06</p><h2>{item.title}</h2><p>{item.size ? `Tamanho ${item.size}` : "Variação selecionada"}</p>{item.mipoDecision && <small><Icon name="spark" /> {item.mipoDecision === "accepted" ? "Tamanho escolhido com assistência MIPO" : "Escolha pessoal mantida"}</small>}</div>
         <div className="quantity"><button aria-label="Diminuir quantidade" onClick={() => onQuantity(item.id, item.quantity - 1)}><Icon name="minus" /></button><span>{item.quantity}</span><button aria-label="Aumentar quantidade" onClick={() => onQuantity(item.id, item.quantity + 1)}><Icon name="plus" /></button></div>
         <strong>{money.format(item.unitPrice * item.quantity / 100)}</strong>
         <button className="remove" aria-label={`Remover ${item.title}`} onClick={() => onRemove(item.id)}><Icon name="close" /></button>
@@ -229,28 +305,31 @@ function Checkout({ cart, onFinish, onBack }: { cart: Cart; onFinish: () => void
         <section className="form-section"><span className="step-number">03</span><div><h2>Pagamento visual</h2><label className="mock-payment"><input type="radio" defaultChecked name="payment"/> Cartão fictício <span>•••• 4242</span></label></div></section>
         <button className="primary-action" type="submit">Concluir demonstração <Icon name="arrow" /></button>
       </form>
-      <aside className="summary"><p className="eyebrow">Sua escolha</p>{cart.items.map(item => <div className="checkout-item" key={item.id}><span>{item.quantity}× {item.title} · {item.size}</span><strong>{money.format(item.unitPrice * item.quantity / 100)}</strong></div>)}<hr/><div className="summary__total"><span>Total demonstrativo</span><strong>{money.format(total / 100)}</strong></div></aside>
+      <aside className="summary"><p className="eyebrow">Sua escolha</p>{cart.items.map(item => <div className="checkout-item" key={item.id}><span>{item.quantity}× {item.title}{item.size ? ` · ${item.size}` : ""}{item.selectionContext && <small className="checkout-context">{item.selectionContext.label}: {item.selectionContext.preference}</small>}</span><strong>{money.format(item.unitPrice * item.quantity / 100)}</strong></div>)}<hr/><div className="summary__total"><span>Total demonstrativo</span><strong>{money.format(total / 100)}</strong></div></aside>
     </div>
   </main>;
 }
 
 export function Storefront() {
   const persistent = process.env.NEXT_PUBLIC_DATA_SOURCE === "supabase";
+  const maxStorefrontProducts = 48;
   const [view, setView] = useState<View>("catalog");
   const [products, setProducts] = useState<Product[]>(localProducts);
   const [activeProduct, setActiveProduct] = useState<Product>(localProducts[0]);
   const [cart, setCart] = useState<Cart>({ id: "cart_demo", region: { id: "reg_br", name: "Brasil", currency_code: "brl" }, items: [] });
   const [toast, setToast] = useState("");
   const [serviceError, setServiceError] = useState("");
+  const [catalogLoading, setCatalogLoading] = useState(persistent);
 
-  useEffect(() => { if (!persistent) { setCart(localCommerceRepository.getCart()); return; } Promise.all([commerceApi.products(), commerceApi.cart()]).then(([catalog, savedCart]) => { setProducts(catalog); setCart(savedCart); if (catalog[0]) setActiveProduct(catalog[0]); }).catch((error) => setServiceError(error.message)); }, [persistent]);
+  useEffect(() => { if (!persistent) { setCart(localCommerceRepository.getCart()); setCatalogLoading(false); return; } Promise.all([commerceApi.products(), commerceApi.cart()]).then(([catalog, savedCart]) => { const validCatalog = catalog.filter((product) => product.title && product.variants.length > 0); if (!validCatalog.length || validCatalog.length > maxStorefrontProducts) throw new Error(`Catálogo remoto fora do limite seguro (${validCatalog.length} produtos recebidos).`); setProducts(validCatalog); setCart(savedCart); if (validCatalog[0]) setActiveProduct(validCatalog[0]); }).catch((error) => setServiceError(error.message)).finally(() => setCatalogLoading(false)); }, [persistent]);
   useEffect(() => { window.scrollTo({ top: 0, behavior: "smooth" }); }, [view, activeProduct]);
   const cartCount = useMemo(() => cart.items.reduce((sum, item) => sum + item.quantity, 0), [cart]);
 
   function openProduct(product: Product) { setActiveProduct(product); setView("product"); }
-  async function add(product: Product, variant: ProductVariant, decision?: "accepted" | "kept_original") {
-    const next = persistent ? await commerceApi.addItem(variant.id, 1, decision) : localCommerceRepository.addLineItem({ productId: product.id, variantId: variant.id, title: product.title, size: variant.size, quantity: 1, unitPrice: variant.price, color: product.color, mipoDecision: decision });
-    if (!decision) recordMipoEvent({ productId: product.id, selectedVariantId: variant.id, risk: evaluateCheckoutRisk(product, variant).risk, decision: "not_required" });
+  async function add(product: Product, variant: ProductVariant, decision?: "accepted" | "kept_original", selectionContext?: SelectionContext) {
+    const next = persistent ? await commerceApi.addItem(variant.id, 1, decision, selectionContext) : localCommerceRepository.addLineItem({ productId: product.id, variantId: variant.id, title: product.title, size: variant.size, quantity: 1, unitPrice: variant.price, color: product.color, mipoDecision: decision, selectionContext });
+    const isApparel = product.productKind === "apparel" || (!product.productKind && product.category !== "Maquiagem");
+    if (!decision && isApparel) recordMipoEvent({ productId: product.id, selectedVariantId: variant.id, risk: evaluateCheckoutRisk(product, variant).risk, decision: "not_required" });
     setCart(next); setToast(`${product.title} foi para sua sacola.`); setTimeout(() => setToast(""), 2800); setView("cart");
   }
   async function changeQuantity(id:string, quantity:number) { setCart(persistent ? await commerceApi.updateItem(id, Math.max(1, quantity)) : localCommerceRepository.updateLineItem(id, quantity)); }
@@ -261,10 +340,11 @@ export function Storefront() {
     <div className="demo-banner">Experiência demonstrativa · nenhum dado ou pagamento é processado</div>
     <Header cartCount={cartCount} onNavigate={setView} />
     {serviceError && <main className="service-error"><h1>Dados temporariamente indisponíveis</h1><p>{serviceError}</p><p>Verifique a configuração do Supabase. O modo local não é ativado silenciosamente.</p></main>}
-    {!serviceError && view === "catalog" && <Catalog products={products} onProduct={openProduct} />}
-    {!serviceError && view === "product" && <ProductDetail product={activeProduct} persistent={persistent} onBack={() => setView("catalog")} onAdded={add} onAlternative={(id) => { const found = products.find(p => p.id === id); if (found) openProduct(found); }} />}
-    {!serviceError && view === "cart" && <CartView cart={cart} onQuantity={(id,quantity) => void changeQuantity(id,quantity)} onRemove={(id) => void removeItem(id)} onCheckout={() => setView("checkout")} onCatalog={() => setView("catalog")} />}
-    {!serviceError && view === "checkout" && <Checkout cart={cart} onBack={() => setView("cart")} onFinish={() => void finishDemo()} />}
+    {!serviceError && catalogLoading && <main className="service-loading" aria-live="polite"><p className="eyebrow">Seleção Vértice</p><h1>Preparando a coleção…</h1><p>Estamos carregando os produtos curados.</p></main>}
+    {!serviceError && !catalogLoading && view === "catalog" && <Catalog products={products} onProduct={openProduct} />}
+    {!serviceError && !catalogLoading && view === "product" && <ProductDetail product={activeProduct} persistent={persistent} onBack={() => setView("catalog")} onAdded={add} onAlternative={(id) => { const found = products.find(p => p.id === id); if (found) openProduct(found); }} />}
+    {!serviceError && !catalogLoading && view === "cart" && <CartView cart={cart} onQuantity={(id,quantity) => void changeQuantity(id,quantity)} onRemove={(id) => void removeItem(id)} onCheckout={() => setView("checkout")} onCatalog={() => setView("catalog")} />}
+    {!serviceError && !catalogLoading && view === "checkout" && <Checkout cart={cart} onBack={() => setView("cart")} onFinish={() => void finishDemo()} />}
     {view === "success" && <main className="success-page"><p className="eyebrow">Demonstração concluída</p><span className="success-mark">✓</span><h1>Escolha registrada.<br/><em>Nenhuma compra foi realizada.</em></h1><p>O fluxo visual terminou aqui. Em uma integração real, o pedido seria criado pelo backend Medusa.</p><button className="primary-action" onClick={() => setView("catalog")}>Voltar à coleção <Icon name="arrow" /></button></main>}
     {toast && <div className="toast" role="status">{toast}</div>}
     <footer><div className="wordmark">VÉRTICE<span>atelier cotidiano</span></div><p>Uma demonstração de escolha assistida pelo MIPO. <a href="/painel">Painel MIPO →</a></p><p>© 2026 · Case EloGroup</p></footer>

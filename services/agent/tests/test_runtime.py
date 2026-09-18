@@ -30,7 +30,7 @@ def test_completed_intervention_is_returned_without_running_graph(monkeypatch):
     from mipo_agent import main
     from mipo_agent.models import AgentAnswer
 
-    cached = AgentAnswer(action="explain_evidence", message="Mensagem já auditada.", rationaleCode="stock_context", provider="eloagents", model="cached", status="eloagents_succeeded")
+    cached = AgentAnswer(action="explain_evidence", message="Mensagem já auditada.", rationaleCode="no_risk", provider="eloagents", model="cached", status="eloagents_succeeded")
     monkeypatch.setattr(main, "find_existing", lambda _request: cached)
     monkeypatch.setattr(main, "execute_agent", lambda _request: (_ for _ in ()).throw(AssertionError("graph_must_not_run")))
 

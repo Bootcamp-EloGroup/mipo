@@ -11,7 +11,6 @@ class ExpectedOutcome(BaseModel):
     risk: Risk
     allowedActions: list[str] = Field(min_length=1)
     rationaleCode: Literal[
-        "stock_context",
         "size_context",
         "quality_context",
         "insufficient_sample",

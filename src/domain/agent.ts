@@ -1,5 +1,5 @@
 import type { FitPreference, MipoThresholds, RiskResult } from "@/src/services/mipo";
-import type { Product, ProductVariant } from "@/src/domain/commerce";
+import type { Product, ProductVariant, SelectionContext } from "@/src/domain/commerce";
 
 export const AGENT_ACTIONS = ["explain_evidence", "present_authorized_alternative", "suggest_add_to_cart", "no_intervention"] as const;
 export type AgentAction = typeof AGENT_ACTIONS[number];
@@ -12,12 +12,13 @@ export type AgentContext = {
   fitPreference: FitPreference;
   thresholds: MipoThresholds;
   deterministicResult: RiskResult;
+  selectionContext?: SelectionContext;
 };
 
 export type AgentAnswer = {
   action: AgentAction;
   message: string;
-  rationaleCode: "stock_context" | "size_context" | "quality_context" | "insufficient_sample" | "no_risk";
+  rationaleCode: "size_context" | "quality_context" | "preference_context" | "insufficient_sample" | "no_risk";
   provider: AgentProvider;
   model: string;
   status: "eloagents_succeeded" | "groq_succeeded" | "deterministic_fallback" | "rejected_by_policy" | "cache_hit";
@@ -27,7 +28,7 @@ export type AgentTurn =
   | { type: "tool_call"; tool: "get_product_evidence" | "calculate_mipo_risk" | "get_allowed_actions"; arguments: Record<string, never> }
   | { type: "final_answer"; action: AgentAction; message: string; rationaleCode: AgentAnswer["rationaleCode"] };
 
-const rationaleCodes = new Set<AgentAnswer["rationaleCode"]>(["stock_context", "size_context", "quality_context", "insufficient_sample", "no_risk"]);
+const rationaleCodes = new Set<AgentAnswer["rationaleCode"]>(["size_context", "quality_context", "preference_context", "insufficient_sample", "no_risk"]);
 const providers = new Set<AgentAnswer["provider"]>(["eloagents", "groq", "deterministic", "cache"]);
 const statuses = new Set<AgentAnswer["status"]>(["eloagents_succeeded", "groq_succeeded", "deterministic_fallback", "rejected_by_policy", "cache_hit"]);
 

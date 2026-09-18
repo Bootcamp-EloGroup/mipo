@@ -1,11 +1,11 @@
 import "server-only";
 import { products as localProducts, region } from "@/src/data/products";
-import type { Cart, Product } from "@/src/domain/commerce";
+import type { Cart, Product, SelectionContext } from "@/src/domain/commerce";
 import { dataSource, supabaseRest } from "@/src/lib/supabase-rest";
 import { expiresAt } from "@/src/lib/session";
 
 type DbCart = { id: string; currency_code: string };
-type DbCartItem = { id: string; quantity: number; unit_price_cents: number; mipo_decision?: "accepted" | "kept_original"; product_variants: { id: string; size: "P"|"M"|"G"|"GG"; products: { id: string; title: string; color: string } } };
+type DbCartItem = { id: string; quantity: number; unit_price_cents: number; mipo_decision?: "accepted" | "kept_original"; selection_context?: SelectionContext | null; product_variants: { id: string; size: "P"|"M"|"G"|"GG"|null; title: string; products: { id: string; title: string; color: string } } };
 
 export async function listProducts(): Promise<Product[]> {
   if (dataSource() === "local") return localProducts;
@@ -27,17 +27,17 @@ async function ensureCart(sessionId: string): Promise<DbCart> {
 export async function getCart(sessionId: string): Promise<Cart> {
   const cart = await ensureCart(sessionId);
   if (dataSource() === "local") return { id: cart.id, region, items: [] };
-  const rows = await supabaseRest<DbCartItem[]>(`cart_items?cart_id=eq.${cart.id}&select=id,quantity,unit_price_cents,mipo_decision,product_variants(id,size,products(id,title,color))`);
-  return { id: cart.id, region: { ...region, currency_code: cart.currency_code }, items: rows.map((row) => ({ id: row.id, productId: row.product_variants.products.id, variantId: row.product_variants.id, title: row.product_variants.products.title, size: row.product_variants.size, quantity: row.quantity, unitPrice: row.unit_price_cents, color: row.product_variants.products.color, mipoDecision: row.mipo_decision })) };
+  const rows = await supabaseRest<DbCartItem[]>(`cart_items?cart_id=eq.${cart.id}&select=id,quantity,unit_price_cents,mipo_decision,selection_context,product_variants(id,size,products(id,title,color))`);
+  return { id: cart.id, region: { ...region, currency_code: cart.currency_code }, items: rows.map((row) => ({ id: row.id, productId: row.product_variants.products.id, variantId: row.product_variants.id, title: row.product_variants.products.title, size: row.product_variants.size, quantity: row.quantity, unitPrice: row.unit_price_cents, color: row.product_variants.products.color, mipoDecision: row.mipo_decision, selectionContext: row.selection_context ?? undefined })) };
 }
 
-export async function addCartItem(sessionId: string, variantId: string, quantity: number, mipoDecision?: "accepted"|"kept_original") {
+export async function addCartItem(sessionId: string, variantId: string, quantity: number, mipoDecision?: "accepted"|"kept_original", selectionContext?: SelectionContext) {
   const cart = await ensureCart(sessionId); const product = (await listProducts()).find((item) => item.variants.some((variant) => variant.id === variantId)); const variant = product?.variants.find((item) => item.id === variantId);
   if (!product || !variant) throw new Error("Variação não encontrada.");
-  if (dataSource() === "local") return { id: cart.id, region, items: [{ id: crypto.randomUUID(), productId: product.id, variantId, title: product.title, size: variant.size, quantity, unitPrice: variant.price, color: product.color, mipoDecision }] } satisfies Cart;
+  if (dataSource() === "local") return { id: cart.id, region, items: [{ id: crypto.randomUUID(), productId: product.id, variantId, title: product.title, size: variant.size, quantity, unitPrice: variant.price, color: product.color, mipoDecision, selectionContext }] } satisfies Cart;
   const current = await supabaseRest<Array<{id:string;quantity:number}>>(`cart_items?cart_id=eq.${cart.id}&variant_id=eq.${variantId}&select=id,quantity&limit=1`);
-  if (current[0]) await supabaseRest(`cart_items?id=eq.${current[0].id}`, { method: "PATCH", body: JSON.stringify({ quantity: current[0].quantity + quantity, mipo_decision: mipoDecision }) });
-  else await supabaseRest("cart_items", { method: "POST", body: JSON.stringify({ cart_id: cart.id, variant_id: variantId, quantity, unit_price_cents: variant.price, mipo_decision: mipoDecision }) });
+  if (current[0]) await supabaseRest(`cart_items?id=eq.${current[0].id}`, { method: "PATCH", body: JSON.stringify({ quantity: current[0].quantity + quantity, mipo_decision: mipoDecision, selection_context: selectionContext ?? null }) });
+  else await supabaseRest("cart_items", { method: "POST", body: JSON.stringify({ cart_id: cart.id, variant_id: variantId, quantity, unit_price_cents: variant.price, mipo_decision: mipoDecision, selection_context: selectionContext ?? null }) });
   return getCart(sessionId);
 }
 

@@ -5,19 +5,22 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import END,START,StateGraph
 from pydantic import BaseModel
 from .models import AgentAnswer,AgentExecution,AgentRequest,AgentStep
-RATIONALE={"stock":"stock_context","size":"size_context","quality":"quality_context","insufficient_evidence":"insufficient_sample","none":"no_risk"}
+RATIONALE={"stock":"no_risk","size":"size_context","quality":"quality_context","preference_mismatch":"preference_context","insufficient_evidence":"insufficient_sample","none":"no_risk"}
 def allowed_messages(r:AgentRequest)->list[str]:
  x=r.deterministicResult
- if x.risk=="stock": return ["O estoque desta escolha está reduzido. A disponibilidade pode mudar.","Há poucas unidades disponíveis para esta escolha. Considere essa informação antes de continuar."]
+ if x.risk=="preference_mismatch": return [x.message]
+ if r.selectionContext and r.product.productKind != "apparel": return [x.message]
+ if x.risk=="stock": return ["A escolha pode seguir para o carrinho. Para vestuário, revise seu tamanho usual e a preferência de caimento."]
  if x.risk=="size" and x.recommendedVariant: return [f"O histórico observado favorece o tamanho {x.recommendedVariant.size}. Você pode comparar antes de continuar."]
  if x.risk=="quality": return ["O histórico observado indica atenção para esta escolha. Você pode comparar a alternativa disponível."]
  if x.risk=="insufficient_evidence": return ["Ainda não há histórico suficiente para recomendar uma mudança. Você pode manter sua escolha."]
  return ["Não identificamos necessidade de intervenção para esta escolha."]
 def allowed_actions(r:AgentRequest)->list[str]:
  x=r.deterministicResult
+ if x.risk=="preference_mismatch": return ["explain_evidence","present_authorized_alternative","no_intervention"]
+ if r.selectionContext and r.product.productKind != "apparel": return ["explain_evidence","suggest_add_to_cart","no_intervention"]
  if x.risk=="size" and x.recommendedVariant:return ["explain_evidence","present_authorized_alternative","no_intervention"]
  if x.risk=="quality" and x.alternativeProductId:return ["explain_evidence","present_authorized_alternative","no_intervention"]
- if x.risk=="stock" and (r.selected.inventory_quantity or 0)>0:return ["explain_evidence","suggest_add_to_cart","no_intervention"]
  return ["explain_evidence","no_intervention"]
 class Choice(BaseModel):
  action:str; message:str; rationaleCode:str
@@ -42,7 +45,7 @@ def _failure(error:Exception)->str:
  if isinstance(error,httpx.HTTPError) or "connect" in name or "status" in message:return "provider_unavailable"
  return "invalid_output"
 def final(s:State):
- r=s["request"]; msgs=allowed_messages(r); fallback=AgentAnswer(action="explain_evidence",message=r.deterministicResult.message,rationaleCode=RATIONALE[r.deterministicResult.risk],provider="deterministic",model="none",status="deterministic_fallback");last_failure="provider_unavailable";steps=s.get("steps",[])
+ r=s["request"]; msgs=allowed_messages(r); fallback=AgentAnswer(action="explain_evidence",message=msgs[0],rationaleCode=RATIONALE[r.deterministicResult.risk],provider="deterministic",model="none",status="deterministic_fallback");last_failure="provider_unavailable";steps=s.get("steps",[])
  for attempt,(provider,key,model,base) in enumerate([("eloagents","ELOAGENTS_API_KEY",os.getenv("ELOAGENTS_MODEL","gpt-54-mini"),os.getenv("ELOAGENTS_BASE_URL","https://chat.eloagents.click/api")),("groq","GROQ_API_KEY",os.getenv("GROQ_MODEL","openai/gpt-oss-20b"),"https://api.groq.com/openai/v1")],1):
   if not os.getenv(key):continue
   started=time.perf_counter()

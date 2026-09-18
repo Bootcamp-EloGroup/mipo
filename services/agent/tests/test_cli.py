@@ -14,8 +14,8 @@ def test_http_adapter_uses_contract_and_optional_token():
         assert request.url.path == "/v1/explain"
         return httpx.Response(200, json={
             "action": "explain_evidence",
-            "message": "O estoque desta escolha está reduzido. A disponibilidade pode mudar.",
-            "rationaleCode": "stock_context",
+            "message": "Não identificamos necessidade de intervenção para esta escolha.",
+            "rationaleCode": "no_risk",
             "provider": "eloagents",
             "model": "fake",
             "status": "eloagents_succeeded",

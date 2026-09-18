@@ -18,7 +18,6 @@ def test_corpus_is_valid_and_covers_the_spec():
 
     assert len(cases) >= 22
     assert {case.expected.risk for case in cases} == {
-        "stock",
         "size",
         "quality",
         "insufficient_evidence",

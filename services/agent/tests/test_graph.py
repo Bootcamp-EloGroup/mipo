@@ -1,12 +1,11 @@
 import pytest
 from mipo_agent.graph import Choice,allowed_actions,allowed_messages,execute_agent,run_agent
 from mipo_agent.models import AgentRequest
-def fixture():return AgentRequest.model_validate({"interventionId":"i","product":{"id":"p","title":"Camisa","category":"Moda","variants":[{"id":"v","size":"GG","returnRate":0,"defectRate":0,"inventory_quantity":3}]},"selected":{"id":"v","size":"GG","returnRate":0,"defectRate":0,"inventory_quantity":3},"fitPreference":"regular","thresholds":{"highReturnRate":.25,"minimumImprovement":.08,"lowStockQuantity":3,"minimumSampleSize":30},"deterministicResult":{"risk":"stock","level":"medium","evidence":"snapshot","message":"Estoque reduzido para esta escolha. A disponibilidade pode mudar."}})
-def test_stock(monkeypatch):
- monkeypatch.delenv("ELOAGENTS_API_KEY",raising=False);monkeypatch.delenv("GROQ_API_KEY",raising=False);r=fixture();assert "suggest_add_to_cart" in allowed_actions(r);assert run_agent(r).status=="deterministic_fallback"
+def fixture():return AgentRequest.model_validate({"interventionId":"i","product":{"id":"p","title":"Camisa","category":"Moda","variants":[{"id":"v","size":"GG","returnRate":0,"defectRate":0,"inventory_quantity":3}]},"selected":{"id":"v","size":"GG","returnRate":0,"defectRate":0,"inventory_quantity":3},"fitPreference":"regular","thresholds":{"highReturnRate":.25,"minimumImprovement":.08,"lowStockQuantity":3,"minimumSampleSize":30},"deterministicResult":{"risk":"none","level":"low","evidence":"Nenhum limiar foi atingido.","message":"Não identificamos necessidade de intervenção para esta escolha."}})
+def test_standard_choice_does_not_use_inventory(monkeypatch):
+ monkeypatch.delenv("ELOAGENTS_API_KEY",raising=False);monkeypatch.delenv("GROQ_API_KEY",raising=False);r=fixture();assert "suggest_add_to_cart" not in allowed_actions(r);assert run_agent(r).status=="deterministic_fallback"
 
 @pytest.mark.parametrize(("risk","level","rationale","actions"),[
- ("stock","medium","stock_context",["explain_evidence","suggest_add_to_cart","no_intervention"]),
  ("size","high","size_context",["explain_evidence","present_authorized_alternative","no_intervention"]),
  ("quality","high","quality_context",["explain_evidence","present_authorized_alternative","no_intervention"]),
  ("insufficient_evidence","low","insufficient_sample",["explain_evidence","no_intervention"]),
@@ -33,7 +32,7 @@ def test_eloagents_failure_is_audited_before_groq_success(monkeypatch):
  def invoke(provider,*_args):
   calls.append(provider)
   if provider=="eloagents":raise TimeoutError("provider timeout")
-  request=fixture();return Choice(action="explain_evidence",message=allowed_messages(request)[0],rationaleCode="stock_context")
+  request=fixture();return Choice(action="explain_evidence",message=allowed_messages(request)[0],rationaleCode="no_risk")
  monkeypatch.setattr(graph_module,"invoke_provider",invoke)
  execution=execute_agent(fixture())
  assert calls==["eloagents","groq"]

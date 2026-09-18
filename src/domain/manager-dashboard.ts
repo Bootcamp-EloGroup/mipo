@@ -1,6 +1,6 @@
 export type DataOrigin = "historical" | "snapshot" | "demo" | "scenario";
 export type DashboardDecision = "accepted" | "kept_original" | "not_required" | "pending" | "abandoned";
-export type RiskType = "size" | "quality" | "stock" | "none" | "insufficient_evidence";
+export type RiskType = "size" | "quality" | "preference_mismatch" | "stock" | "none" | "insufficient_evidence";
 export type DashboardFilters = { from:string|null;to:string|null;channel:string|null;category:string|null;origin:"all"|"historical"|"demo" };
 export type LabeledCount = { label:string;count:number };
 export type ImpactScenarioBasis = {
