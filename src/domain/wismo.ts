@@ -1,4 +1,4 @@
-export type SlaScope = "state" | "region" | "national";
+export type SlaScope = "channel" | "state" | "region" | "national";
 export type SlaConfidence = "alta" | "media" | "baixa";
 export type DeliveryPhase = "preparing" | "in_transit" | "delivered";
 export type DeliveryFlag = "on_time" | "late";
@@ -16,7 +16,7 @@ export type DeliveryRuler = {
   sampleSize: number;
 };
 
-export type DeliveryRulerSet = { state?: DeliveryRuler; region?: DeliveryRuler; national: DeliveryRuler };
+export type DeliveryRulerSet = { channel?: DeliveryRuler; state?: DeliveryRuler; region?: DeliveryRuler; national: DeliveryRuler };
 
 export type WismoThresholds = {
   preparationDays: number;
@@ -29,6 +29,7 @@ export type WismoThresholds = {
 export type WismoOrder = {
   orderKey: string;
   orderedAt: string;
+  channel: string | null;
   customerState: string | null;
   actualDeliveryDays: number | null;
 };

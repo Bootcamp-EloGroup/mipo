@@ -35,7 +35,7 @@ insert into public.brazilian_states(uf, name, region) values
 
 create table public.logistics_sla (
   id uuid primary key,
-  scope text not null check (scope in ('state','region','national')),
+  scope text not null check (scope in ('channel','state','region','national')),
   scope_key text not null,
   p50_days integer not null check (p50_days > 0),
   p75_days integer not null check (p75_days > 0),
@@ -66,7 +66,7 @@ create table public.wismo_rule_sets (
 create unique index one_active_wismo_rule_set on public.wismo_rule_sets (is_active) where is_active;
 
 insert into public.wismo_rule_sets(version, preparation_days, critical_extra_days, high_confidence_sample, medium_confidence_sample, escalation_grace_days, is_active)
-values ('2026-09-20.v1', 2, 3, 30, 5, 0, true);
+values ('2026-09-20.v1', 2, 2, 30, 5, 0, true);
 
 alter table public.orders add column customer_key text;
 alter table public.orders add column customer_state text references public.brazilian_states(uf);
@@ -80,7 +80,7 @@ create table public.order_delivery_assessments (
   sla_id uuid not null references public.logistics_sla(id),
   rule_set_id uuid not null references public.wismo_rule_sets(id),
   import_run_id uuid not null references public.data_import_runs(id),
-  applied_scope text not null check (applied_scope in ('state','region','national')),
+  applied_scope text not null check (applied_scope in ('channel','state','region','national')),
   sample_size integer not null check (sample_size > 0),
   promised_days integer not null check (promised_days > 0),
   critical_days integer not null check (critical_days > 0),

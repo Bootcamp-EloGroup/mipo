@@ -50,7 +50,7 @@ const [salesText, customersText] = await Promise.all([readFile(resolve(salesPath
 const salesRows = parseCsv(salesText);
 const customerRows = parseCsv(customersText);
 
-const requiredSales = ["order_id", "customer_id", "tempo_entrega_real"];
+const requiredSales = ["order_id", "customer_id", "canal", "tempo_entrega_real"];
 const requiredCustomers = ["customer_id", "estado"];
 for (const column of requiredSales) if (!(column in (salesRows[0]?.data ?? {}))) throw new Error(`vendas.csv sem coluna obrigatória: ${column}`);
 for (const column of requiredCustomers) if (!(column in (customerRows[0]?.data ?? {}))) throw new Error(`clientes.csv sem coluna obrigatória: ${column}`);
@@ -72,11 +72,14 @@ const sales = salesRows.filter(({ rowNumber, data }) => {
 });
 
 function buildMatrix(rows, fileHash) {
-  const byState = new Map(); const byRegion = new Map(); const national = [];
-  let withoutCustomer = 0;
+  const byChannel = new Map(); const byState = new Map(); const byRegion = new Map(); const national = [];
+  let withoutCustomer = 0; let withoutChannel = 0;
   for (const { data } of rows) {
     const delivery = integer(data.tempo_entrega_real);
     national.push(delivery);
+    const channel = (data.canal || "").trim();
+    if (channel) { if (!byChannel.has(channel)) byChannel.set(channel, []); byChannel.get(channel).push(delivery); }
+    else withoutChannel += 1;
     const state = stateByCustomer.get(data.customer_id);
     if (!state) { withoutCustomer += 1; continue; }
     if (!byState.has(state.uf)) byState.set(state.uf, []);
@@ -88,14 +91,16 @@ function buildMatrix(rows, fileHash) {
     return { id: uuid(`sla:${fileHash}:${scope}:${scopeKey}`), scope, scope_key: scopeKey, p50_days: percentile(asc, 0.5), p75_days: percentile(asc, 0.75), p90_days: percentile(asc, 0.9), sample_size: asc.length };
   };
   const sla = [
+    ...[...byChannel.entries()].map(([channel, values]) => emit("channel", channel, values)),
     ...[...byState.entries()].map(([uf, values]) => emit("state", uf, values)),
     ...[...byRegion.entries()].map(([region, values]) => emit("region", region, values)),
     ...(national.length ? [emit("national", "BR", national)] : []),
   ];
-  return { sla, withoutCustomer };
+  return { sla, withoutCustomer, withoutChannel };
 }
 
-function summarize(sla, withoutCustomer, mode) {
+function summarize(sla, withoutCustomer, withoutChannel, mode) {
+  const channelRows = sla.filter((row) => row.scope === "channel");
   const stateRows = sla.filter((row) => row.scope === "state");
   const covered = new Set(stateRows.map((row) => row.scope_key));
   const p75 = stateRows.map((row) => row.p75_days);
@@ -104,8 +109,11 @@ function summarize(sla, withoutCustomer, mode) {
     sales: { read: salesRows.length, accepted: sales.length },
     customers: { read: customerRows.length, accepted: customers.length },
     salesWithoutCustomer: withoutCustomer,
+    salesWithoutChannel: withoutChannel,
     rejected: rejections.length,
     sla: {
+      channels: channelRows.map((row) => ({ canal: row.scope_key, n: row.sample_size, p50: row.p50_days, p75: row.p75_days, p90: row.p90_days })).sort((a, b) => b.n - a.n),
+      channelP75Distinct: new Set(channelRows.map((row) => row.p75_days)).size,
       states: stateRows.length,
       regions: sla.filter((row) => row.scope === "region").length,
       national: sla.filter((row) => row.scope === "national").length,
@@ -119,7 +127,7 @@ function summarize(sla, withoutCustomer, mode) {
 }
 
 const preview = buildMatrix(sales, "preview");
-console.log(JSON.stringify(summarize(preview.sla, preview.withoutCustomer, args.has("--apply") ? "apply" : "dry-run"), null, 2));
+console.log(JSON.stringify(summarize(preview.sla, preview.withoutCustomer, preview.withoutChannel, args.has("--apply") ? "apply" : "dry-run"), null, 2));
 if (!args.has("--apply")) process.exit(0);
 
 async function loadEnv() {
@@ -163,7 +171,7 @@ for (let offset = 0; ; offset += 1000) {
 }
 
 const matched = sales.filter(({ data }) => existing.has(data.order_id));
-const { sla, withoutCustomer } = buildMatrix(matched, run.file_hash);
+const { sla, withoutCustomer, withoutChannel } = buildMatrix(matched, run.file_hash);
 
 const orderRows = matched.map(({ data }) => {
   const row = existing.get(data.order_id);
@@ -175,4 +183,4 @@ await batchUpsert("logistics_sla", sla.map((row) => ({ ...row, import_run_id: ru
 await batchUpsert("orders", orderRows, "id");
 if (rejections.length) await batchUpsert("import_rejections", rejections.map((row) => ({ ...row, import_run_id: run.id })), "id");
 
-console.log(JSON.stringify({ ...summarize(sla, withoutCustomer, "applied"), runId: run.id, ordersMatched: matched.length, ordersInCsvWithoutRow: sales.length - matched.length }, null, 2));
+console.log(JSON.stringify({ ...summarize(sla, withoutCustomer, withoutChannel, "applied"), runId: run.id, ordersMatched: matched.length, ordersInCsvWithoutRow: sales.length - matched.length }, null, 2));

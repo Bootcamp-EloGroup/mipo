@@ -2,7 +2,7 @@ import type { BrazilRegion, DeliveryFlag, DeliveryPhase, DeliveryRuler, Delivery
 
 const DAY = 86_400_000;
 
-export const defaultWismoThresholds: WismoThresholds = { preparationDays: 2, criticalExtraDays: 3, highConfidenceSample: 30, mediumConfidenceSample: 5, escalationGraceDays: 0 };
+export const defaultWismoThresholds: WismoThresholds = { preparationDays: 2, criticalExtraDays: 2, highConfidenceSample: 30, mediumConfidenceSample: 5, escalationGraceDays: 0 };
 
 const regionLabel: Record<BrazilRegion, string> = { norte: "Norte", nordeste: "Nordeste", centro_oeste: "Centro-Oeste", sudeste: "Sudeste", sul: "Sul" };
 const phaseLabel: Record<DeliveryPhase, string> = { preparing: "em preparação", in_transit: "em transporte", delivered: "entregue" };
@@ -11,6 +11,7 @@ const days = (value: number) => `${value} ${value === 1 ? "dia" : "dias"}`;
 const dayMonth = (iso: string) => { const date = new Date(iso); return `${String(date.getUTCDate()).padStart(2, "0")}/${String(date.getUTCMonth() + 1).padStart(2, "0")}`; };
 
 function scopeLabel(ruler: DeliveryRuler): string {
+  if (ruler.scope === "channel") return `o canal ${ruler.scopeKey}`;
   if (ruler.scope === "state") return `o estado ${ruler.scopeKey}`;
   if (ruler.scope === "region") return `a região ${regionLabel[ruler.scopeKey as BrazilRegion] ?? ruler.scopeKey}`;
   return "o Brasil";
@@ -27,7 +28,9 @@ export function criticalDaysOf(ruler: DeliveryRuler, thresholds: WismoThresholds
 }
 
 export function resolveRuler(rulers: DeliveryRulerSet): { ruler: DeliveryRuler; chain: SlaScope[] } {
-  const chain: SlaScope[] = ["state"];
+  const chain: SlaScope[] = ["channel"];
+  if (rulers.channel && rulers.channel.sampleSize >= 1) return { ruler: rulers.channel, chain };
+  chain.push("state");
   if (rulers.state && rulers.state.sampleSize >= 1) return { ruler: rulers.state, chain };
   chain.push("region");
   if (rulers.region && rulers.region.sampleSize >= 1) return { ruler: rulers.region, chain };

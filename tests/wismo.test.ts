@@ -6,29 +6,56 @@ const DAY = 86_400_000;
 const ORDERED_AT = "2023-06-15T00:00:00.000Z";
 
 const ruler = (scope: SlaScope, scopeKey: string, p50: number, p75: number, p90: number, sampleSize: number): DeliveryRuler => ({ scope, scopeKey, p50Days: p50, p75Days: p75, p90Days: p90, sampleSize });
-const national = ruler("national", "BR", 8, 12, 16, 27758);
+const national = ruler("national", "BR", 8, 12, 14, 27758);
 const rulers = (extra: Partial<DeliveryRulerSet> = {}): DeliveryRulerSet => ({ national, ...extra });
-const order = (actualDeliveryDays: number | null, orderedAt = ORDERED_AT): WismoOrder => ({ orderKey: "ORD-DEMO-001", orderedAt, customerState: "AC", actualDeliveryDays });
+const order = (actualDeliveryDays: number | null, orderedAt = ORDERED_AT): WismoOrder => ({ orderKey: "ORD-DEMO-001", orderedAt, channel: "Orgânico", customerState: "AC", actualDeliveryDays });
 const at = (offsetDays: number, orderedAt = ORDERED_AT) => new Date(Date.parse(orderedAt) + offsetDays * DAY);
 
 describe("escada de régua por especificidade", () => {
+  it("usa a régua do canal antes da do estado", () => {
+    const resolved = resolveRuler(rulers({ channel: ruler("channel", "Marketplace", 12, 15, 17, 6040), state: ruler("state", "AC", 9, 12, 14, 628) }));
+    expect(resolved.ruler.scope).toBe("channel");
+    expect(resolved.ruler.scopeKey).toBe("Marketplace");
+    expect(resolved.chain).toEqual(["channel"]);
+  });
+
+  it("usa a régua do canal mesmo com amostra 1", () => {
+    const resolved = resolveRuler(rulers({ channel: ruler("channel", "WhatsApp", 9, 9, 9, 1), state: ruler("state", "AC", 9, 12, 14, 628) }));
+    expect(resolved.ruler.scope).toBe("channel");
+    expect(resolved.ruler.sampleSize).toBe(1);
+  });
+
+  it("cai para o estado quando o canal não tem régua", () => {
+    const resolved = resolveRuler(rulers({ state: ruler("state", "AC", 9, 12, 14, 628) }));
+    expect(resolved.ruler.scope).toBe("state");
+    expect(resolved.chain).toEqual(["channel", "state"]);
+  });
+
   it("usa a régua do estado mesmo com amostra 1", () => {
     const resolved = resolveRuler(rulers({ state: ruler("state", "AC", 9, 9, 9, 1), region: ruler("region", "norte", 10, 14, 18, 900) }));
     expect(resolved.ruler.scope).toBe("state");
     expect(resolved.ruler.sampleSize).toBe(1);
-    expect(resolved.chain).toEqual(["state"]);
+    expect(resolved.chain).toEqual(["channel", "state"]);
   });
 
-  it("cai para a região quando o estado não tem régua", () => {
+  it("cai para a região quando canal e estado não têm régua", () => {
     const resolved = resolveRuler(rulers({ region: ruler("region", "norte", 10, 14, 18, 900) }));
     expect(resolved.ruler.scope).toBe("region");
-    expect(resolved.chain).toEqual(["state", "region"]);
+    expect(resolved.chain).toEqual(["channel", "state", "region"]);
   });
 
-  it("cai para o nacional quando estado e região não têm régua", () => {
+  it("cai para o nacional quando nenhum degrau acima tem régua", () => {
     const resolved = resolveRuler(rulers());
     expect(resolved.ruler.scope).toBe("national");
-    expect(resolved.chain).toEqual(["state", "region", "national"]);
+    expect(resolved.chain).toEqual(["channel", "state", "region", "national"]);
+  });
+
+  it("separa Marketplace dos demais canais com o mesmo pedido", () => {
+    const marketplace = evaluateDeliveryStatus(order(14), rulers({ channel: ruler("channel", "Marketplace", 12, 15, 17, 6040) }));
+    const organico = evaluateDeliveryStatus(order(14), rulers({ channel: ruler("channel", "Orgânico", 7, 11, 13, 3246) }));
+    expect(marketplace.flag).toBe("on_time");
+    expect(organico.flag).toBe("late");
+    expect(organico.daysLate).toBe(3);
   });
 
   it("nunca bloqueia por amostra pequena", () => {
@@ -50,11 +77,12 @@ describe("rótulo de confiança", () => {
 
 describe("banda de escalonamento", () => {
   it("abre banda mínima quando p75 é igual a p90", () => {
-    expect(criticalDaysOf(ruler("state", "AC", 9, 9, 9, 1))).toBe(12);
+    expect(criticalDaysOf(ruler("state", "AC", 9, 9, 9, 1))).toBe(11);
   });
 
   it("não alarga a banda de uma régua bem amostrada", () => {
-    expect(criticalDaysOf(national)).toBe(16);
+    expect(criticalDaysOf(ruler("channel", "Marketplace", 12, 15, 17, 6040))).toBe(17);
+    expect(criticalDaysOf(ruler("channel", "Orgânico", 7, 11, 13, 3246))).toBe(13);
   });
 });
 
@@ -68,14 +96,15 @@ describe("classificação retrospectiva", () => {
   });
 
   it("classifica pedido histórico entregue com atraso", () => {
-    const status = evaluateDeliveryStatus(order(15), rulers());
+    const status = evaluateDeliveryStatus(order(13), rulers());
     expect(status.flag).toBe("late");
-    expect(status.daysLate).toBe(3);
+    expect(status.daysLate).toBe(1);
     expect(status.criticalBreach).toBe(false);
   });
 
   it("marca violação crítica em entrega acima do limiar", () => {
-    const status = evaluateDeliveryStatus(order(17), rulers());
+    const status = evaluateDeliveryStatus(order(15), rulers());
+    expect(status.flag).toBe("late");
     expect(status.criticalBreach).toBe(true);
     expect(status.escalate).toBe(false);
   });

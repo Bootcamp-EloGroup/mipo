@@ -17,7 +17,7 @@ export async function GET(request: Request, context: RouteContext<"/api/wismo/or
     if (!runId) return Response.json({ error: "Nenhuma importação concluída encontrada." }, { status: 409 });
     const [rule, matrix] = await Promise.all([getActiveWismoRuleSet(), getRulerMatrix(runId)]);
     const evaluated = asOf ? projectOrderAt(order, asOf) : order;
-    const status = evaluateDeliveryStatus(evaluated, matrix.rulersFor(order.customerState), asOf ?? new Date(), rule.thresholds);
+    const status = evaluateDeliveryStatus(evaluated, matrix.rulersFor(order.channel, order.customerState), asOf ?? new Date(), rule.thresholds);
     return Response.json({ order, ruleVersion: rule.version, status: { ...status, evidence: { ...status.evidence, asOf: asOf?.toISOString() } } });
   } catch (error) { return apiError(error); }
 }

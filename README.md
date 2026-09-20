@@ -32,6 +32,7 @@ As bases CSV não estão incluídas porque contêm identificadores e textos em n
 - [`docs/evidencias.md`](docs/evidencias.md) — relatório rastreável de evidências.
 - [`docs/roadmap.md`](docs/roadmap.md) — roadmap técnico em ordem de dependências.
 - [`docs/mvp.md`](docs/mvp.md) — definição funcional e técnica do MVP.
+- [`docs/pos-venda-wismo.md`](docs/pos-venda-wismo.md) — régua de entrega, motor de status e guia para o frontend do chatbot.
 
 ## E-commerce e Supabase
 
@@ -75,6 +76,18 @@ Depois de revisar o resumo, grave no Supabase com `--apply`. O importador calcul
 
 Os atributos de tamanho e cor inexistentes nos CSVs são armazenados com origem `synthetic`. Estoque é registrado como snapshot com data derivada da importação, nunca como série histórica.
 
+### Régua logística do pós-venda
+
+Um segundo comando, também dry-run por padrão, deriva o prazo de entrega por canal e estado a partir de `tempo_entrega_real`:
+
+```bash
+corepack pnpm data:import-logistics -- \
+  --sales /caminho/vendas.csv \
+  --customers /caminho/clientes.csv
+```
+
+Ele nunca cria import run nem reescreve catálogo: intersecta com os pedidos já existentes e só preenche colunas novas em `orders`. Detalhes em [`docs/pos-venda-wismo.md`](docs/pos-venda-wismo.md).
+
 ### API server-side
 
 - `GET /api/products` e `GET /api/products/:id`
@@ -85,6 +98,9 @@ Os atributos de tamanho e cor inexistentes nos CSVs são armazenados com origem 
 - `POST /api/mipo/explain`
 - `POST /api/mipo/decisions`
 - `GET /api/dashboard`
+- `GET /api/wismo/orders/:orderKey` (aceita `?asOf=<ISO>`)
+- `GET /api/wismo/sla`
+- `POST /api/wismo/assessments`
 
 Todas as tabelas têm RLS habilitada e não concedem acesso a `anon` ou `authenticated`. A aplicação acessa a Data API apenas pelas rotas do Next.js.
 
