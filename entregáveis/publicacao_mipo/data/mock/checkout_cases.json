@@ -1,0 +1,175 @@
+{
+  "dataset": "mipo-checkout-synthetic-v1",
+  "description": "Casos sintéticos para demonstrar o score de risco e recomendação no checkout.",
+  "privacy": "Nenhum registro representa uma pessoa ou pedido real.",
+  "cases": [
+    {
+      "case_id": "case-001",
+      "sku": "CALCA-WIDE-PRETA-M",
+      "product_name": "Calça Wide Leg Preta",
+      "product_category": "calças",
+      "selected_size": "M",
+      "return_rate": 0.34,
+      "dominant_reason": "tamanho pequeno",
+      "sample_size": 100,
+      "quality_return_rate": 0.03,
+      "customer_usual_size": "G",
+      "customer_size_observations": 8,
+      "stock_selected": 4,
+      "alternatives": [
+        {"sku": "CALCA-WIDE-PRETA-G", "label": "Calça Wide Leg Preta", "size": "G", "return_rate": 0.16, "stock": 12, "same_product": true},
+        {"sku": "CALCA-RETA-PRETA-G", "label": "Calça Reta Preta", "size": "G", "return_rate": 0.18, "stock": 7, "same_product": false}
+      ]
+    },
+    {
+      "case_id": "case-002",
+      "sku": "CALCA-JOGGER-AZUL-G",
+      "product_name": "Calça Jogger Azul",
+      "product_category": "calças",
+      "selected_size": "G",
+      "return_rate": 0.31,
+      "dominant_reason": "tamanho grande",
+      "sample_size": 74,
+      "quality_return_rate": 0.04,
+      "customer_usual_size": "M",
+      "customer_size_observations": 5,
+      "stock_selected": 6,
+      "alternatives": [
+        {"sku": "CALCA-JOGGER-AZUL-M", "label": "Calça Jogger Azul", "size": "M", "return_rate": 0.13, "stock": 9, "same_product": true}
+      ]
+    },
+    {
+      "case_id": "case-003",
+      "sku": "VESTIDO-LINHO-VERDE-M",
+      "product_name": "Vestido de Linho Verde",
+      "product_category": "vestidos",
+      "selected_size": "M",
+      "return_rate": 0.28,
+      "dominant_reason": "defeito",
+      "sample_size": 61,
+      "quality_return_rate": 0.24,
+      "customer_usual_size": "M",
+      "customer_size_observations": 6,
+      "stock_selected": 10,
+      "alternatives": [
+        {"sku": "VESTIDO-ALGODAO-VERDE-M", "label": "Vestido de Algodão Verde", "size": "M", "return_rate": 0.11, "stock": 14, "same_product": false}
+      ]
+    },
+    {
+      "case_id": "case-004",
+      "sku": "CAMISETA-BASICA-BRANCA-M",
+      "product_name": "Camiseta Básica Branca",
+      "product_category": "camisetas",
+      "selected_size": "M",
+      "return_rate": 0.12,
+      "dominant_reason": "expectativa diferente",
+      "sample_size": 120,
+      "quality_return_rate": 0.02,
+      "customer_usual_size": "M",
+      "customer_size_observations": 12,
+      "stock_selected": 35,
+      "alternatives": []
+    },
+    {
+      "case_id": "case-005",
+      "sku": "TENIS-CORRIDA-CINZA-40",
+      "product_name": "Tênis de Corrida Cinza",
+      "product_category": "calçados",
+      "selected_size": "40",
+      "return_rate": 0.22,
+      "dominant_reason": "tamanho pequeno",
+      "sample_size": 48,
+      "quality_return_rate": 0.05,
+      "customer_usual_size": "40",
+      "customer_size_observations": 4,
+      "stock_selected": 2,
+      "alternatives": [
+        {"sku": "TENIS-CORRIDA-CINZA-41", "label": "Tênis de Corrida Cinza", "size": "41", "return_rate": 0.14, "stock": 0, "same_product": true},
+        {"sku": "TENIS-TRAINING-CINZA-40", "label": "Tênis Training Cinza", "size": "40", "return_rate": 0.15, "stock": 5, "same_product": false}
+      ]
+    },
+    {
+      "case_id": "case-006",
+      "sku": "BLUSA-CANELADA-ROSA-P",
+      "product_name": "Blusa Canelada Rosa",
+      "product_category": "blusas",
+      "selected_size": "P",
+      "return_rate": 0.08,
+      "dominant_reason": null,
+      "sample_size": 92,
+      "quality_return_rate": 0.01,
+      "customer_usual_size": "P",
+      "customer_size_observations": 7,
+      "stock_selected": 18,
+      "alternatives": []
+    },
+    {
+      "case_id": "case-007",
+      "sku": "JAQUETA-JEANS-AZUL-M",
+      "product_name": "Jaqueta Jeans Azul",
+      "product_category": "jaquetas",
+      "selected_size": "M",
+      "return_rate": 0.26,
+      "dominant_reason": "tamanho pequeno",
+      "sample_size": 18,
+      "quality_return_rate": 0.03,
+      "customer_usual_size": "G",
+      "customer_size_observations": 2,
+      "stock_selected": 3,
+      "alternatives": [
+        {"sku": "JAQUETA-JEANS-AZUL-G", "label": "Jaqueta Jeans Azul", "size": "G", "return_rate": 0.17, "stock": 8, "same_product": true}
+      ]
+    },
+    {
+      "case_id": "case-008",
+      "sku": "SAIA-MIDI-PRETA-G",
+      "product_name": "Saia Midi Preta",
+      "product_category": "saias",
+      "selected_size": "G",
+      "return_rate": 0.37,
+      "dominant_reason": "tamanho grande",
+      "sample_size": 86,
+      "quality_return_rate": 0.02,
+      "customer_usual_size": "G",
+      "customer_size_observations": 9,
+      "stock_selected": 1,
+      "alternatives": [
+        {"sku": "SAIA-MIDI-PRETA-M", "label": "Saia Midi Preta", "size": "M", "return_rate": 0.15, "stock": 11, "same_product": true}
+      ]
+    },
+    {
+      "case_id": "case-009",
+      "sku": "MOLETOM-CAPUZ-CINZA-M",
+      "product_name": "Moletom com Capuz Cinza",
+      "product_category": "moletons",
+      "selected_size": "M",
+      "return_rate": 0.19,
+      "dominant_reason": "tamanho pequeno",
+      "sample_size": 33,
+      "quality_return_rate": 0.06,
+      "customer_usual_size": "G",
+      "customer_size_observations": 4,
+      "stock_selected": 5,
+      "alternatives": [
+        {"sku": "MOLETOM-CAPUZ-CINZA-G", "label": "Moletom com Capuz Cinza", "size": "G", "return_rate": 0.12, "stock": 4, "same_product": true}
+      ]
+    },
+    {
+      "case_id": "case-010",
+      "sku": "SHORT-TACTEL-PRETO-M",
+      "product_name": "Short de Tactel Preto",
+      "product_category": "shorts",
+      "selected_size": "M",
+      "return_rate": 0.42,
+      "dominant_reason": "defeito",
+      "sample_size": 140,
+      "quality_return_rate": 0.31,
+      "customer_usual_size": "M",
+      "customer_size_observations": 15,
+      "stock_selected": 0,
+      "alternatives": [
+        {"sku": "SHORT-TACTEL-AZUL-M", "label": "Short de Tactel Azul", "size": "M", "return_rate": 0.10, "stock": 13, "same_product": false}
+      ]
+    }
+  ]
+}
