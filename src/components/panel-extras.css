@@ -1,0 +1,30 @@
+/* Estilos dos blocos de tabela agrupada, período personalizado e intervenções agrupadas (usa os tokens do painel gerencial). */
+.manager-filters__custom{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:1px;background:#c8c7bd}
+.manager-filters__custom label{padding:10px 13px;background:#e8e6dc}
+.manager-filters__custom input{display:block;width:100%;min-height:28px;margin-top:3px;border:0;background:transparent;color:var(--mgr-ink,#172018);font-size:11px;font-weight:700}
+.manager-filters__custom p{grid-column:1/-1;margin:0;padding:8px 13px;background:#fae4d9;font-size:10px}
+.panel-plus{display:inline-grid;place-items:center;flex:none;width:26px;height:26px;margin-right:10px;padding:0;border:1px solid var(--mgr-ink,#172018);background:transparent;color:inherit;cursor:pointer;font-size:16px;line-height:1;vertical-align:middle}
+.panel-plus:hover{background:var(--mgr-ink,#172018);color:#fff}
+.panel-group-row td{font-weight:800;background:#f3f1e8}
+.panel-group-row td:first-child{white-space:nowrap}
+.panel-child-row td:first-child{padding-left:48px}
+.panel-subgroup-row td{font-weight:700;background:#f8f6ee}
+.panel-subgroup-row td:first-child{padding-left:44px;white-space:nowrap}
+.panel-child-row--deep td:first-child{padding-left:82px}
+.panel-nested{padding:0!important;background:#faf9f3}
+.panel-nested .manager-table-scroll{margin:0;padding:0 0 0 48px}
+.panel-recent{margin-top:14px;background:var(--mgr-card,#fffef9);border:1px solid var(--mgr-line,#d5d2c7)}
+.panel-recent__toggle{display:flex;width:100%;align-items:center;justify-content:space-between;gap:16px;padding:18px 26px;border:0;background:transparent;color:inherit;cursor:pointer;text-align:left}
+.panel-recent__toggle>span:first-child{display:grid;gap:4px}
+.panel-recent__toggle strong{font:600 26px var(--display)}
+.panel-recent__toggle small{color:#62675e;font-size:10px}
+.panel-recent__plus{display:grid;place-items:center;flex:none;width:36px;height:36px;border:1px solid var(--mgr-ink,#172018);font-size:20px;line-height:1}
+.panel-recent__body{padding:0 26px 26px}
+.panel-range{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
+.panel-range button{min-height:36px;padding:0 12px;border:1px solid var(--mgr-ink,#172018);background:transparent;color:inherit;cursor:pointer;font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.panel-range button[aria-pressed="true"]{background:var(--mgr-ink,#172018);color:#fff}
+.panel-dates{display:flex;flex-wrap:wrap;gap:12px;margin:0 0 12px}
+.panel-dates label{display:grid;gap:4px;color:#62675e;font-size:8px;font-weight:800;letter-spacing:.09em;text-transform:uppercase}
+.panel-dates input{min-height:36px;padding:0 8px;border:1px solid var(--mgr-line,#d5d2c7);background:var(--mgr-card,#fffef9);color:inherit;font-size:11px}
+.panel-recent__summary{margin:0 0 10px;color:#62675e;font-size:10px}
+@media(max-width:820px){.manager-filters__custom{grid-template-columns:1fr}.panel-recent__toggle,.panel-recent__body{padding-left:16px;padding-right:16px}.panel-nested .manager-table-scroll{padding-left:0}}

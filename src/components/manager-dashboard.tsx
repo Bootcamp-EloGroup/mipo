@@ -1,5 +1,8 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { GroupedDataTable } from "@/src/components/grouped-data-table";
+import { PeriodCustomFields } from "@/src/components/panel-period-fields";
+import { RecentInterventions } from "@/src/components/recent-interventions";
 import {
   Area,
   AreaChart,
@@ -188,6 +191,8 @@ export function ManagerDashboard() {
   const [view, setView] = useState<View>("executive");
   const [filters, setFilters] = useState({
     period: "all",
+    from: "",
+    to: "",
     channel: "",
     category: "",
     origin: "all",
@@ -197,7 +202,11 @@ export function ManagerDashboard() {
     setError("");
     try {
       const params = new URLSearchParams();
-      if (filters.period !== "all") {
+      if (filters.period === "custom") {
+        const valid = !filters.from || !filters.to || filters.from <= filters.to;
+        if (valid && filters.from) params.set("from", filters.from);
+        if (valid && filters.to) params.set("to", filters.to);
+      } else if (filters.period !== "all") {
         const from = new Date();
         from.setDate(from.getDate() - Number(filters.period));
         params.set("from", from.toISOString().slice(0, 10));
@@ -406,6 +415,7 @@ export function ManagerDashboard() {
               <option value="30">Últimos 30 dias</option>
               <option value="90">Últimos 90 dias</option>
               <option value="365">Últimos 12 meses</option>
+              <option value="custom">Período personalizado</option>
             </select>
           </label>
           <label>
@@ -458,6 +468,13 @@ export function ManagerDashboard() {
               <option value="demo">Demonstração</option>
             </select>
           </label>
+          {filters.period === "custom" && (
+            <PeriodCustomFields
+              from={filters.from}
+              to={filters.to}
+              onChange={(from, to) => setFilters((value) => ({ ...value, from, to }))}
+            />
+          )}
         </section>
         {error && (
           <div className="manager-warning" role="status">
@@ -526,14 +543,17 @@ export function ManagerDashboard() {
                     : "Sem meses no recorte."
                 }
                 table={
-                  <DataTable
+                  <GroupedDataTable
                     caption="Receita e margem mensais"
-                    headers={["Mês", "Receita", "Margem"]}
-                    rows={monthly.map((i) => [
-                      i.label,
-                      money.format(i.revenue),
-                      money.format(i.margin),
-                    ])}
+                    groupBy="quarter"
+                    firstHeader="Mês"
+                    items={monthly}
+                    dateOf={(i) => i.month}
+                    labelOf={(i) => i.label}
+                    columns={[
+                      { header: "Receita", value: (i) => money.format(i.revenue), sum: (i) => i.revenue, format: (total) => money.format(total) },
+                      { header: "Margem", value: (i) => money.format(i.margin), sum: (i) => i.margin, format: (total) => money.format(total) },
+                    ]}
                   />
                 }
               >
@@ -1177,15 +1197,18 @@ export function ManagerDashboard() {
                     : "Importe os agregados de atendimento para preencher esta série."
                 }
                 table={
-                  <DataTable
+                  <GroupedDataTable
                     caption="Tickets semanais"
-                    headers={["Semana", "Tickets", "WISMO", "CSAT"]}
-                    rows={weekly.map((i) => [
-                      i.label,
-                      i.tickets,
-                      i.wismo,
-                      i.csat ?? "—",
-                    ])}
+                    groupBy="year"
+                    firstHeader="Semana"
+                    items={weekly}
+                    dateOf={(i) => i.week}
+                    labelOf={(i) => i.label}
+                    columns={[
+                      { header: "Tickets", value: (i) => i.tickets, sum: (i) => i.tickets },
+                      { header: "WISMO", value: (i) => i.wismo, sum: (i) => i.wismo },
+                      { header: "CSAT", value: (i) => i.csat ?? "—" },
+                    ]}
                   />
                 }
               >
@@ -1223,14 +1246,17 @@ export function ManagerDashboard() {
                     : "Execute ou gere interações para preencher esta série."
                 }
                 table={
-                  <DataTable
+                  <GroupedDataTable
                     caption="Intervenções MIPO diárias"
-                    headers={["Dia", "Intervenções", "Aceitas"]}
-                    rows={daily.map((i) => [
-                      i.label,
-                      i.interventions,
-                      i.accepted,
-                    ])}
+                    groupBy="month"
+                    firstHeader="Dia"
+                    items={daily}
+                    dateOf={(i) => i.day}
+                    labelOf={(i) => i.label}
+                    columns={[
+                      { header: "Intervenções", value: (i) => i.interventions, sum: (i) => i.interventions },
+                      { header: "Aceitas", value: (i) => i.accepted, sum: (i) => i.accepted },
+                    ]}
                   />
                 }
               >
@@ -1372,40 +1398,12 @@ export function ManagerDashboard() {
                 />
               </div>
             </section>
-            <section className="manager-table-card">
-              <header>
-                <div>
-                  <p className="manager-eyebrow">Rastreabilidade</p>
-                  <h2>Intervenções recentes</h2>
-                </div>
-                <span>{data.mipo.recent.length} registros</span>
-              </header>
-              {data.mipo.recent.length ? (
-                <DataTable
-                  caption="Intervenções MIPO recentes"
-                  headers={[
-                    "Momento",
-                    "Produto",
-                    "Risco",
-                    "Evidência",
-                    "Decisão",
-                    "Origem",
-                    "IA",
-                  ]}
-                  rows={data.mipo.recent.map((row) => [
-                    fullDate.format(new Date(row.occurredAt)),
-                    `${row.product} · ${row.selectedSize}${row.recommendedSize ? ` → ${row.recommendedSize}` : ""}`,
-                    riskLabel[row.risk],
-                    row.evidence,
-                    decisionLabel[row.decision],
-                    row.origin === "demo" ? "Demo" : "Histórico",
-                    row.agentStatus ?? "Sem execução",
-                  ])}
-                />
-              ) : (
-                <Empty message="Use a loja ou execute o seed demonstrativo para gerar eventos." />
-              )}
-            </section>
+            <RecentInterventions
+              rows={data.mipo.recent}
+              riskLabel={riskLabel}
+              decisionLabel={decisionLabel}
+              formatMoment={(iso) => fullDate.format(new Date(iso))}
+            />
           </section>
         )}
       </main>
