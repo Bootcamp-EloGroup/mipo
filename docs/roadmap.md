@@ -1,5 +1,10 @@
 # Roadmap cronologico de desenvolvimento - MIPO
 
+> **Decisao de priorizacao — setembro de 2026:** os dias e dependencias de WISMO
+> permanecem documentados como backlog futuro. O incremento atual deve fechar
+> checkout, segurança, auditoria e mensuração não causal antes de iniciar o
+> fluxo pós-compra.
+
 ## Objetivo
 
 Desenvolver um MVP demonstravel do **MIPO (Motor Inteligente de Priorizacao Operacional)** em duas semanas, com dois fluxos principais:
@@ -377,7 +382,7 @@ Entrega do dia:
 
 ---
 
-## Dia 5 - Implementacao do chatbot WISMO
+## Backlog futuro - Implementacao do chatbot WISMO
 
 O chatbot deve ser um fluxo por regras, focado apenas em status de pedido.
 
@@ -799,4 +804,3 @@ O MVP esta pronto quando:
 - Nao ha integracao real com ERP/WMS/TMS.
 - Nao ha reposicao automatica.
 - Nao ha otimizacao automatica de marketing.
-

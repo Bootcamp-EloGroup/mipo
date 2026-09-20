@@ -7,7 +7,7 @@ export type DashboardRow = {
   product: string;
   selectedSize: string;
   recommendedSize?: string;
-  risk: "size" | "quality" | "stock" | "none" | "insufficient_evidence";
+  risk: "size" | "quality" | "preference_mismatch" | "stock" | "none" | "insufficient_evidence";
   level: "high" | "medium" | "low";
   evidence: string;
   ruleVersion: string;

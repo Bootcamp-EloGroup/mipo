@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DashboardData, DashboardDecision, DashboardRow } from "@/src/domain/dashboard";
 
-const riskLabel: Record<DashboardRow["risk"], string> = { size:"Tamanho", quality:"Qualidade", stock:"Estoque", none:"Sem intervenção", insufficient_evidence:"Evidência insuficiente" };
+const riskLabel: Record<DashboardRow["risk"], string> = { size:"Tamanho", quality:"Qualidade", preference_mismatch:"Preferência", stock:"Estoque", none:"Sem intervenção", insufficient_evidence:"Evidência insuficiente" };
 const decisionLabel: Record<DashboardDecision,string> = { accepted:"Aceita", kept_original:"Original mantida", not_required:"Não necessária", pending:"Pendente", abandoned:"Sem resposta" };
 const date = new Intl.DateTimeFormat("pt-BR", { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" });
 const percent = new Intl.NumberFormat("pt-BR", { style:"percent", maximumFractionDigits:1 });
