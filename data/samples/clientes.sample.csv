@@ -1,0 +1,3 @@
+customer_id,nome_completo,genero,estado,cidade,nivel_fidelidade,segmento_rfm
+CLI-ANON-001,Cliente Demonstração 1,Não informado,SP,São Paulo,Prata,Fiéis
+CLI-ANON-002,Cliente Demonstração 2,Não informado,AC,Rio Branco,Bronze,Novos
