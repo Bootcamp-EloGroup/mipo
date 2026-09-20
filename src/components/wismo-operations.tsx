@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { ManagerDashboardData } from "@/src/domain/manager-dashboard";
-import { WISMO_OUTCOME_LABELS, WISMO_STATUS_LABELS, type WismoDashboardData } from "@/src/domain/wismo";
+import { WISMO_OUTCOME_LABELS, WISMO_STATUS_LABELS, type WismoDashboardData } from "@/src/domain/wismo-chat";
 import { wismoApi } from "@/src/services/wismo-api";
 import { WismoImpactSimulator } from "@/src/components/wismo-impact-simulator";
 import "./wismo-badge.css";

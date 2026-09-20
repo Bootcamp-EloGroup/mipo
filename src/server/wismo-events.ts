@@ -10,7 +10,7 @@ import {
   type WismoEvent,
   type WismoEventInput,
   type WismoStatus,
-} from "@/src/domain/wismo";
+} from "@/src/domain/wismo-chat";
 import { DataSourceUnavailableError, dataSource } from "@/src/lib/supabase-rest";
 
 export class WismoEventNotFoundError extends Error {}
@@ -21,7 +21,7 @@ type Parsed = { ok: true; value: WismoEventInput } | { ok: false; error: string 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_EVENTS = 500;
 const RECENT_LIMIT = 20;
-const UNAVAILABLE = "O registro de atendimentos WISMO no Supabase depende da migration wismo_core (Frente 1) e ainda não foi habilitado.";
+const UNAVAILABLE = "O registro de atendimentos WISMO no Supabase depende de uma tabela de atendimentos que ainda não existe (a combinar com a Frente 1) e não foi habilitado.";
 
 /** Armazenamento em memória do modo local, compartilhado entre as rotas do mesmo processo. */
 const holder = globalThis as typeof globalThis & { __mipoWismoEvents?: Map<string, StoredEvent> };

@@ -1,4 +1,4 @@
-import { isValidOrderCode, normalizeOrderCode, type WismoStatusResponse } from "@/src/domain/wismo";
+import { isValidOrderCode, normalizeOrderCode, type WismoStatusResponse } from "@/src/domain/wismo-chat";
 
 /**
  * Cenários provisórios da interface WISMO. Não implementam as regras reais:

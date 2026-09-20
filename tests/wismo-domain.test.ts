@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { WISMO_STATUSES, isValidOrderCode, normalizeOrderCode, outcomeFor } from "../src/domain/wismo";
+import { WISMO_STATUSES, isValidOrderCode, normalizeOrderCode, outcomeFor } from "../src/domain/wismo-chat";
 import { MOCK_ORDER_EXAMPLES, mockWismoStatus } from "../src/services/wismo-mock";
 
 const now = new Date("2026-09-20T15:00:00Z");

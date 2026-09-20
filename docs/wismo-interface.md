@@ -8,36 +8,41 @@ Documento de contrato entre a **Frente 2** (interface, eventos, painel e simulad
 | --- | --- |
 | Tela de identificação do pedido | `src/app/pedido/page.tsx` |
 | Conversa simulada, badges e escalonamento | `src/components/wismo-chat.tsx` |
-| Tipos e contrato do domínio | `src/domain/wismo.ts` |
+| Tipos e contrato do domínio | `src/domain/wismo-chat.ts` |
 | Registro de atendimentos | `POST/GET /api/wismo/events` (`src/server/wismo-events.ts`) |
 | Indicadores no painel gerencial | `src/components/wismo-operations.tsx` |
 | Simulador de impacto (cenário) | `src/domain/wismo-impact.ts`, `src/components/wismo-impact-simulator.tsx` |
-| Mock provisório do motor | `src/services/wismo-mock.ts` |
+| Mock de demonstração | `src/services/wismo-mock.ts` |
+| Tradução motor → interface | `src/services/wismo-adapter.ts` |
 
-## Contrato que a Frente 1 precisa cumprir
+## Como a interface consome o motor de regras (Frente 1)
 
-`GET /api/wismo/status?order=<codigo>` deve responder com `WismoStatusResponse` (ver `src/domain/wismo.ts`):
+A interface chama `GET /api/wismo/orders/:orderKey` (ex.: `ORD-033198`) e traduz a resposta em `src/services/wismo-adapter.ts`. Nenhuma regra é reimplementada aqui.
 
-- `found`, `orderCode`, `status`, `customerMessage`, `needsEscalation`, `dataOrigin` (obrigatórios);
-- `orderStatusLabel`, `carrier`, `lastTrackingEvent`, `lastTrackingAt`, `promisedDate`, `daysWithoutUpdate`, `escalationReason` (opcionais).
-- `status`: `on_time | delayed | no_update | delivered | inconclusive`.
-- `dataOrigin`: `observed | synthetic | mock`.
-- Pedido inexistente: `found: false`, sem escalonar (a interface registra o desfecho `not_found`).
+| Motor (Frente 1) | Interface (`WismoStatusResponse`) |
+| --- | --- |
+| `status.phase = delivered` | `delivered` |
+| `flag = late` (não entregue) | `delayed` |
+| `flag = on_time` (não entregue) | `on_time` |
+| `status.escalate` | `needsEscalation` (+ motivo com dias de atraso e limiar crítico) |
+| `status.message` | `customerMessage` |
+| `status.evidence.promisedAt` | `promisedDate` |
+| HTTP 404 | `found: false`, sem escalonar |
 
-Regra sugerida: `no_update` e `inconclusive` devem vir com `needsEscalation: true` e `escalationReason`.
+`no_update` (sem atualização de rastreio) e `carrier`/`lastTracking*` só existem nos cenários mock: o motor atual não tem eventos de rastreio. Se a Frente 1 passar a ter esses dados, basta estender o adaptador.
 
 ## Como a interface usa o mock
 
-Enquanto a Frente 1 não publica a rota, defina `NEXT_PUBLIC_WISMO_SOURCE=mock` no `.env.local`. A interface passa a usar `mockWismoStatus` (pedidos de exemplo `ORD-1001` a `ORD-1005`, um por status). **Sem a variável, a interface chama a rota real** — não há fallback silencioso entre mock e dados reais.
+Para demonstrar sem dados (ou sem banco), defina `NEXT_PUBLIC_WISMO_SOURCE=mock` no `.env.local`. A interface passa a usar `mockWismoStatus` (pedidos de exemplo `ORD-1001` a `ORD-1005`, um por status). **Sem a variável, a interface chama o motor real** — não há fallback silencioso entre mock e dados reais.
 
 ## Registro de atendimentos
 
 `POST /api/wismo/events` recebe `WismoEventInput` (`id` UUID, `orderCode`, `status`, `outcome`, `escalationReason?`, `dataOrigin`). O mesmo `id` atualiza o atendimento (ex.: cliente pede atendimento humano depois de receber a resposta). Desfechos: `resolved | escalated | not_found`.
 
 - `DATA_SOURCE=local`: guarda em memória do processo (até 500 eventos), útil para demo e testes.
-- `DATA_SOURCE=supabase`: responde indisponível de forma explícita até existir a tabela `wismo_tickets` (migration `wismo_core`, Frente 1). Não há simulação de persistência.
+- `DATA_SOURCE=supabase`: responde indisponível de forma explícita até existir uma tabela de atendimentos (ainda não existe; combinar com a Frente 1). Não há simulação de persistência.
 
-Pontos a alinhar na integração: mapear `WismoEvent` para as colunas de `wismo_tickets`; o servidor deve **recalcular** o status a partir do pedido em vez de confiar no status enviado pelo cliente.
+Pontos a alinhar na integração: definir a tabela de atendimentos e mapear `WismoEvent` para ela; o servidor deve **recalcular** o status a partir do pedido em vez de confiar no status enviado pelo cliente.
 
 ## Simulador de impacto
 

@@ -8,7 +8,7 @@ import {
   outcomeFor,
   type WismoOutcome,
   type WismoStatusResponse,
-} from "@/src/domain/wismo";
+} from "@/src/domain/wismo-chat";
 import "./wismo-badge.css";
 import { MOCK_ORDER_EXAMPLES } from "@/src/services/wismo-mock";
 import { WISMO_MOCK_ENABLED, wismoApi } from "@/src/services/wismo-api";

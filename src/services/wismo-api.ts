@@ -1,10 +1,11 @@
-import type { WismoDashboardData, WismoEventInput, WismoStatusResponse } from "@/src/domain/wismo";
+import type { WismoDashboardData, WismoEventInput, WismoStatusResponse } from "@/src/domain/wismo-chat";
+import { fromEngineResponse, notFoundResponse, type EngineOrderResponse } from "@/src/services/wismo-adapter";
 import { mockWismoStatus } from "@/src/services/wismo-mock";
 
 /**
  * Enquanto a consulta real de pedidos (Frente 1) não estiver integrada, defina
  * NEXT_PUBLIC_WISMO_SOURCE=mock para usar os cenários de demonstração. Sem essa
- * variável, o cliente consulta GET /api/wismo/status; não há troca silenciosa.
+ * variável, o cliente consulta GET /api/wismo/orders/:orderKey (motor de regras da Frente 1); não há troca silenciosa.
  */
 export const WISMO_MOCK_ENABLED = process.env.NEXT_PUBLIC_WISMO_SOURCE === "mock";
 
@@ -17,11 +18,19 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   return response.json();
 }
 
+async function engineStatus(orderCode: string): Promise<WismoStatusResponse> {
+  const response = await fetch(`/api/wismo/orders/${encodeURIComponent(orderCode)}`, { cache: "no-store" });
+  if (response.status === 404) return notFoundResponse(orderCode);
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.error ?? "Serviço indisponível.");
+  }
+  return fromEngineResponse((await response.json()) as EngineOrderResponse);
+}
+
 export const wismoApi = {
   status: (orderCode: string): Promise<WismoStatusResponse> =>
-    WISMO_MOCK_ENABLED
-      ? Promise.resolve(mockWismoStatus(orderCode))
-      : request<WismoStatusResponse>(`/api/wismo/status?order=${encodeURIComponent(orderCode)}`),
+    WISMO_MOCK_ENABLED ? Promise.resolve(mockWismoStatus(orderCode)) : engineStatus(orderCode),
   record: (event: WismoEventInput) =>
     request<{ recorded: boolean }>("/api/wismo/events", { method: "POST", body: JSON.stringify(event) }),
   stats: () => request<WismoDashboardData>("/api/wismo/events"),

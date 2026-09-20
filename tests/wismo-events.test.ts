@@ -61,6 +61,6 @@ describe("registro local de atendimentos", () => {
     await expect(recordWismoEvent("s1", { id: uuid(1), orderCode: "ORD-1001", status: "on_time", outcome: "resolved", dataOrigin: "mock" })).rejects.toBeInstanceOf(DataSourceUnavailableError);
     const data = await getWismoDashboardData();
     expect(data.available).toBe(false);
-    expect(data.reason).toContain("wismo_core");
+    expect(data.reason).toContain("tabela de atendimentos");
   });
 });
