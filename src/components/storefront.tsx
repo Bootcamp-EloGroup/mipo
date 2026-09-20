@@ -1094,7 +1094,7 @@ export function Storefront() {
       {toast && <div className="toast" role="status">{toast}</div>}
       <footer>
         <div className="wordmark">VÉRTICE<span>atelier cotidiano</span></div>
-        <p>Uma demonstração de escolha assistida pelo MIPO. <a href="/painel">Painel MIPO →</a></p>
+        <p>Uma demonstração de escolha assistida pelo MIPO. <a href="/painel">Painel MIPO →</a> · <a href="/pedido">Acompanhar pedido →</a></p>
         <p>© 2026 · Case EloGroup</p>
       </footer>
     </div>
