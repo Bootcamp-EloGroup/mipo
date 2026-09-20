@@ -16,30 +16,33 @@ O Next.js é o dono da sessão e da experiência web. O processo Python fica atr
 
 O agente escolhe uma estratégia de comunicação dentro das ações liberadas pelo motor MIPO. Ele não calcula fórmulas por conta própria, não altera risco ou variantes e não acessa livremente banco, internet ou dados de sessão.
 
-## Execução
+## Execução e endpoints unificados
 
-1. `/api/mipo/evaluate` calcula e persiste a intervenção determinística.
-2. O storefront mostra imediatamente essa mensagem.
-3. `/api/mipo/explain` valida que a intervenção pertence à sessão anônima.
-4. O orquestrador exige a sequência `get_product_evidence` → `calculate_mipo_risk` → `get_allowed_actions` → `final_answer`.
-5. Cada ação do modelo é validada antes de executar uma tool.
-6. EloAgents é chamado primeiro. Falha, timeout ou JSON inválido tornam Groq o provedor dos passos restantes da execução, evitando repetir uma falha já observada.
-7. Na resposta final, o agente escolhe uma mensagem entre as alternativas autorizadas para o risco observado. A política valida ação, justificativa e mensagem; qualquer violação preserva a mensagem determinística.
+O serviço Python centraliza as capacidades de inteligência artificial da aplicação através de contratos estritos:
 
-O loop aceita no máximo quatro passos. Repetição, mudança de ordem ou encerramento antecipado são rejeitados.
-Cada passo recebe somente as observações estruturadas acumuladas e a próxima ação esperada; respostas anteriores do modelo não são reapresentadas como instruções.
+1. `POST /v1/explain`: Executa a orquestração LangGraph (`get_product_evidence` → `calculate_mipo_risk` → `get_allowed_actions` → `final_answer`). Suporta cache semântico em memória (`< 1ms`) para contextos recorrentes e geração explicativa com validação por Guardrails Semânticos (bloqueando termos de desconto, promessas irreais ou tamanhos divergentes do motor determinístico).
+2. `POST /v1/chat`: MIPO Concierge experimental do atelier Vértice. Interpreta dúvidas sobre medidas, silhueta e composição de look, gerando sugestões de ação estruturadas (`select_size` e `view_product`) validadas contra o catálogo e o contexto mantidos pelo servidor. Não representa o fluxo WISMO, que permanece no backlog.
+3. `POST /v1/audit-cart`: Auditoria multi-item da sacola para detecção de disparidade de tamanhos em peças de vestuário e geração de guia de conservação têxtil (linho, tricot, alfaiataria, cosméticos).
+4. `GET /v1/cache` e `POST /v1/cache/clear`: Observabilidade e controle do cache de contexto do agente.
 
-## Contrato dos provedores
+O Next.js consulta primariamente o serviço Python via [`mipo-python-agent.ts`](../src/server/mipo-python-agent.ts). Em caso de indisponibilidade ou execução offline, mantém fallback transparente e seguro para as regras locais do atelier.
 
-- EloAgents: endpoint OpenAI-compatible configurado por `ELOAGENTS_BASE_URL`; JSON Schema estrito mais validação local. O modelo validado para este contrato é `gpt-54-mini`, sem prefixo de provedor.
-- Groq: Chat Completions com JSON Schema estrito e validação local adicional.
-- FastAPI expõe o contrato HTTP e LangGraph governa a sequência explícita das tools; LangChain fornece o cliente OpenAI-compatible dos provedores.
+As rotas web usam [`mipo-assistant.ts`](../src/server/mipo-assistant.ts) como
+adaptador fino. Catálogo, prompts, parsing e ações do concierge pertencem ao
+serviço Python; o fallback TypeScript não replica essas políticas nem sugere
+ações quando o serviço está indisponível.
+
+## Contrato dos provedores e guardrails
+
+- EloAgents: endpoint OpenAI-compatible configurado por `ELOAGENTS_BASE_URL`; JSON Schema estrito mais validação local. Modelo validado: `gpt-54-mini`.
+- Groq: fallback com Chat Completions e validação local estrita.
+- Guardrails Semânticos: a resposta final precisa pertencer ao conjunto de mensagens autorizadas pelo motor determinístico. Termos comerciais proibidos, tamanhos divergentes ou texto livre não autorizado provocam fallback determinístico.
 
 ## Persistência e privacidade
 
 `mipo_agent_runs` armazena resultado consolidado, provedor, modelo, versões, latência e motivo de rejeição. `mipo_agent_steps` registra apenas nome da tool, status, duração e observação estruturada mínima. Prompt bruto, segredo, identificador pessoal e raciocínio interno não são persistidos.
 
-O hash de cache inclui contexto permitido, política e prompt. Uma execução por intervenção torna o endpoint idempotente. As tabelas herdam a exclusão da intervenção; portanto, o reset demonstrativo continua restrito às sessões marcadas como demo.
+O cache semântico em memória usa hash canônico de todo o contexto que pode alterar a resposta, incluindo evidência, mensagem, variantes, seleção e versões de prompt/política. As entradas expiram por TTL. Uma execução por intervenção torna o endpoint idempotente. As tabelas herdam a exclusão da intervenção; portanto, o reset demonstrativo continua restrito às sessões marcadas como demo.
 
 ## Limites
 

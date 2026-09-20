@@ -2,6 +2,17 @@
 
 Esta pasta reúne as análises que fundamentaram o **MIPO (Motor Inteligente de Priorização Operacional)**.
 
+## Escopo executável atual
+
+O produto executável está concentrado na jornada **pré-compra**: avaliação
+determinística de produto/tamanho, explicação controlada, decisão do cliente,
+auditoria e painel. O concierge de moda e a auditoria de sacola são capacidades
+experimentais de demonstração e não substituem o núcleo determinístico.
+
+O fluxo pós-compra **WISMO permanece no backlog**. Os números históricos de
+atendimento sustentam sua prioridade futura, mas a aplicação ainda não consulta
+pedido/tracking, não responde prazo e não registra resolução ou escalonamento WISMO.
+
 ## Ordem de leitura
 
 1. [`analises/01_exploracao_inicial.ipynb`](analises/01_exploracao_inicial.ipynb) — exploração inicial das frentes de vendas, margem, devoluções, atendimento, estoque e clientes.
@@ -41,7 +52,17 @@ O storefront Vértice funciona em dois modos explícitos:
 - `DATA_SOURCE=local`: fixtures públicas para desenvolvimento visual.
 - `DATA_SOURCE=supabase`: catálogo, estoque, carrinho anônimo e decisões MIPO persistidos no projeto remoto.
 
-Não existe fallback silencioso entre os modos. O checkout permanece exclusivamente visual e não cria pedido ou cobrança.
+Não existe fallback silencioso entre os modos. O checkout não realiza cobrança comercial, mas registra pedidos demonstrativos idempotentes para rastrear o piloto.
+
+## Deploy na Vercel
+
+O repositório está preparado para dois projetos Vercel: a aplicação Next.js na raiz e o agente FastAPI com Root Directory `services/agent`. Publique o agente primeiro e configure sua URL HTTPS no projeto web. O roteiro completo, as variáveis por projeto, os smoke tests e o rollback estão em [`docs/deploy-vercel.md`](docs/deploy-vercel.md).
+
+Para executar a configuração guiada:
+
+```bash
+./scripts/setup-vercel.sh
+```
 
 ### Configuração do zero
 
@@ -121,3 +142,19 @@ Configure somente no servidor: `ELOAGENTS_API_KEY`, `ELOAGENTS_MODEL` e `GROQ_AP
 O agente roda em FastAPI + LangGraph e mantém um contrato estreito com a rota Next.js. Inicie com `cd services/agent && uv sync --dev && uv run uvicorn mipo_agent.main:app --reload` e mantenha `MIPO_PYTHON_AGENT_URL=http://127.0.0.1:8000`. Se o processo Python estiver indisponível, a rota preserva a mensagem determinística; não existe um segundo agente em TypeScript.
 
 O desenho técnico e seus limites estão em [`docs/arquitetura-agente-react.md`](docs/arquitetura-agente-react.md).
+
+O próximo incremento planejado — corpus de avaliação, gates de segurança, métricas operacionais e hardening do runtime — está especificado em [`docs/specs/avaliacao-e-prontidao-agente.md`](docs/specs/avaliacao-e-prontidao-agente.md).
+
+### Avaliação do agente
+
+O gate padrão é totalmente offline e não requer credenciais:
+
+```bash
+cd services/agent
+uv sync --dev
+uv run mipo-eval run --adapter offline
+```
+
+Ele executa 22 cenários sintéticos e grava relatórios ignorados pelo Git em `services/agent/evals/results/`. O adapter HTTP valida o processo FastAPI completo. O modo `live` só executa com `--confirm-external-calls`; um smoke externo não substitui os gates determinísticos nem comprova impacto de negócio.
+
+Os últimos resultados sanitizados estão em [`docs/evidencias-avaliacao-agente.md`](docs/evidencias-avaliacao-agente.md).

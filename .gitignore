@@ -4,11 +4,13 @@ data/*.zip
 __pycache__/
 .venv/
 .pytest_cache/
+*.egg-info/
 .DS_Store
 
 
 # Next.js
 .next/
+.vercel/
 node_modules/
 *.tsbuildinfo
 .env

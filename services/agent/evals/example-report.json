@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "startedAt": "2026-09-16T00:00:00+00:00",
+  "adapter": "offline",
+  "promptVersion": "python-react-v1",
+  "policyVersion": "mipo-safe-v2",
+  "summary": {
+    "cases": 22,
+    "passed": 22,
+    "failed": 0
+  },
+  "metrics": {
+    "latencyP50Ms": 0,
+    "latencyP95Ms": 0,
+    "providerCounts": {
+      "deterministic": 4,
+      "eloagents": 18
+    },
+    "policyRejections": 0
+  },
+  "results": []
+}

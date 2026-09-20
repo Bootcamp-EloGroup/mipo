@@ -2,6 +2,9 @@
   "name": "vertice-mipo-storefront",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -18,7 +21,8 @@
     "@medusajs/types": "2.21.0",
     "next": "16.3.5",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "recharts": "^3.2.1"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",

@@ -3,30 +3,159 @@ import { getOrCreateSessionId } from "@/src/lib/session";
 import { dataSource, supabaseRest } from "@/src/lib/supabase-rest";
 import { getProduct } from "@/src/server/store";
 import { runPythonAgent } from "@/src/server/mipo-python-agent";
-import { evaluateCheckoutRisk, type FitPreference, type RiskResult } from "@/src/services/mipo";
+import { evaluateCheckout, evaluateSelectionContext, type FitPreference, type RiskResult } from "@/src/services/mipo";
+import type { BodyMeasurements, MeasurementFitAssessment, SelectionContext, Size } from "@/src/domain/commerce";
 import type { AgentAnswer } from "@/src/domain/agent";
 
-type Intervention = {id:string;session_id:string;product_id:string;selected_variant_id:string;recommended_variant_id:string|null;fit_preference:FitPreference|null;risk_type:RiskResult["risk"];risk_level:RiskResult["level"];evidence:{message?:string};message:string;rule_set_id:string};
-type Rule = {high_return_rate:number;minimum_improvement:number;low_stock_quantity:number;minimum_sample_size:number};
-const rationaleByRisk:Record<RiskResult["risk"],AgentAnswer["rationaleCode"]>={stock:"stock_context",size:"size_context",quality:"quality_context",insufficient_evidence:"insufficient_sample",none:"no_risk"};
+export const maxDuration = 60;
 
-export async function POST(request:Request){
-  try{
-    const body=await request.json(); if(typeof body.interventionId!=="string")return Response.json({error:"Intervenção válida é obrigatória."},{status:400});
-    if(process.env.AI_EXPLANATIONS_ENABLED!=="true")return Response.json({enabled:false});
-    if(dataSource()!=="supabase")return Response.json({enabled:false});
-    const session=await getOrCreateSessionId();
-    const rows=await supabaseRest<Intervention[]>(`mipo_interventions?id=eq.${body.interventionId}&session_id=eq.${session.id}&select=*&limit=1`); const intervention=rows[0];
-    if(!intervention)return Response.json({error:"Intervenção não encontrada para esta sessão."},{status:404});
-    const [product,rules]=await Promise.all([getProduct(intervention.product_id),supabaseRest<Rule[]>(`mipo_rule_sets?id=eq.${intervention.rule_set_id}&select=high_return_rate,minimum_improvement,low_stock_quantity,minimum_sample_size&limit=1`)]); const selected=product?.variants.find((item)=>item.id===intervention.selected_variant_id);
-    if(!product||!selected||!rules[0])return Response.json({error:"Contexto da intervenção não está mais disponível."},{status:409});
-    const thresholds={highReturnRate:rules[0].high_return_rate,minimumImprovement:rules[0].minimum_improvement,lowStockQuantity:rules[0].low_stock_quantity,minimumSampleSize:rules[0].minimum_sample_size};
-    const result=evaluateCheckoutRisk(product,selected,intervention.fit_preference??"regular",thresholds);
-    if(result.risk!==intervention.risk_type||result.level!==intervention.risk_level)return Response.json({error:"A evidência atual diverge da intervenção registrada."},{status:409});
-    const context={interventionId:intervention.id,product,selected,fitPreference:intervention.fit_preference??"regular",thresholds,deterministicResult:result};
-    let answer:AgentAnswer;
-    try{answer=await runPythonAgent(context);}
-    catch{answer={action:"explain_evidence",message:result.message,rationaleCode:rationaleByRisk[result.risk],provider:"deterministic",model:"python_unavailable",status:"deterministic_fallback"};}
-    return Response.json({enabled:true,answer});
-  }catch(error){return apiError(error);}
+type Intervention = {
+  id: string;
+  session_id: string;
+  product_id: string;
+  selected_variant_id: string;
+  recommended_variant_id: string | null;
+  fit_preference: FitPreference | null;
+  risk_type: RiskResult["risk"];
+  risk_level: RiskResult["level"];
+  evidence: {
+    message?: string;
+    usualSize?: Size | null;
+    selectionContext?: { preference: string; label: string; answers?: Record<string, string> };
+    measurementAssessment?: MeasurementFitAssessment;
+    score?: number;
+    evidenceCoverage?: number;
+    outcome?: RiskResult["outcome"];
+  };
+  message: string;
+  rule_set_id: string;
+};
+
+type Rule = {
+  high_return_rate: number;
+  minimum_improvement: number;
+  low_stock_quantity: number;
+  minimum_sample_size: number;
+};
+
+const rationaleByRisk: Record<RiskResult["risk"], AgentAnswer["rationaleCode"]> = {
+  size: "size_context",
+  quality: "quality_context",
+  preference_mismatch: "preference_context",
+  insufficient_evidence: "insufficient_sample",
+  none: "no_risk",
+};
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    if (typeof body.interventionId !== "string") {
+      return Response.json({ error: "Intervenção válida é obrigatória." }, { status: 400 });
+    }
+    if (process.env.AI_EXPLANATIONS_ENABLED !== "true") {
+      return Response.json({ enabled: false });
+    }
+
+    // Local mode handling
+    if (dataSource() !== "supabase" || body.interventionId.startsWith("local-")) {
+      const productId = typeof body.productId === "string" ? body.productId : undefined;
+      const variantId = typeof body.variantId === "string" ? body.variantId : undefined;
+      const fitPreference = (body.fitPreference as FitPreference | undefined) ?? "regular";
+      const usualSize = (body.usualSize as Size | undefined) ?? null;
+      const selectionContext = body.selectionContext as SelectionContext | undefined;
+      const measurements = body.measurements as BodyMeasurements | undefined;
+
+      if (!productId || !variantId) {
+        return Response.json({ enabled: false });
+      }
+
+      const product = await getProduct(productId);
+      const selected = product?.variants.find((v) => v.id === variantId);
+      if (!product || !selected) {
+        return Response.json({ error: "Produto ou variação não encontrado." }, { status: 404 });
+      }
+
+      const result = selectionContext
+        ? evaluateSelectionContext(product, selected, selectionContext)
+        : evaluateCheckout(product, selected, { fitPreference, usualSize, measurements });
+
+      const answer: AgentAnswer = {
+        action: "explain_evidence",
+        message: result.message,
+        rationaleCode: rationaleByRisk[result.risk],
+        provider: "deterministic",
+        model: "deterministic_engine",
+        status: "deterministic_fallback",
+      };
+
+      return Response.json({ enabled: true, answer });
+    }
+
+    // Supabase mode handling
+    const session = await getOrCreateSessionId();
+    const rows = await supabaseRest<Intervention[]>(
+      `mipo_interventions?id=eq.${body.interventionId}&session_id=eq.${session.id}&select=*&limit=1`
+    );
+    const intervention = rows[0];
+    if (!intervention) {
+      return Response.json({ error: "Intervenção não encontrada para esta sessão." }, { status: 404 });
+    }
+
+    const [product, rules] = await Promise.all([
+      getProduct(intervention.product_id),
+      supabaseRest<Rule[]>(
+        `mipo_rule_sets?id=eq.${intervention.rule_set_id}&select=high_return_rate,minimum_improvement,low_stock_quantity,minimum_sample_size&limit=1`
+      ),
+    ]);
+    const selected = product?.variants.find((item) => item.id === intervention.selected_variant_id);
+    if (!product || !selected || !rules[0]) {
+      return Response.json({ error: "Contexto da intervenção não está mais disponível." }, { status: 409 });
+    }
+
+    const thresholds = {
+      highReturnRate: rules[0].high_return_rate,
+      minimumImprovement: rules[0].minimum_improvement,
+      lowStockQuantity: rules[0].low_stock_quantity,
+      minimumSampleSize: rules[0].minimum_sample_size,
+    };
+    const recomputed = intervention.evidence.selectionContext
+      ? evaluateSelectionContext(product, selected, intervention.evidence.selectionContext)
+      : evaluateCheckout(product, selected, { fitPreference: intervention.fit_preference ?? "regular", thresholds, usualSize: intervention.evidence.usualSize });
+    const result: RiskResult = intervention.evidence.measurementAssessment
+      ? { ...recomputed, risk: intervention.risk_type, level: intervention.risk_level, outcome: intervention.evidence.outcome ?? recomputed.outcome, score: intervention.evidence.score ?? recomputed.score, evidenceCoverage: intervention.evidence.evidenceCoverage ?? recomputed.evidenceCoverage, evidence: intervention.evidence.message ?? recomputed.evidence, message: intervention.message, recommendedVariant: intervention.recommended_variant_id ? product.variants.find((variant) => variant.id === intervention.recommended_variant_id) : undefined, measurementAssessment: intervention.evidence.measurementAssessment }
+      : recomputed;
+
+    if (result.risk !== intervention.risk_type || result.level !== intervention.risk_level) {
+      return Response.json({ error: "A evidência atual diverge da intervenção registrada." }, { status: 409 });
+    }
+
+    const context = {
+      interventionId: intervention.id,
+      product,
+      selected,
+      fitPreference: intervention.fit_preference ?? "regular",
+      thresholds,
+      deterministicResult: result,
+      selectionContext: intervention.evidence.selectionContext,
+      measurementAssessment: intervention.evidence.measurementAssessment,
+    };
+
+    let answer: AgentAnswer;
+    try {
+      answer = await runPythonAgent(context, { richExplanation: false });
+    } catch {
+      answer = {
+        action: "explain_evidence",
+        message: result.message,
+        rationaleCode: rationaleByRisk[result.risk],
+        provider: "deterministic",
+        model: "python_unavailable",
+        status: "deterministic_fallback",
+      };
+    }
+
+    return Response.json({ enabled: true, answer });
+  } catch (error) {
+    return apiError(error);
+  }
 }
