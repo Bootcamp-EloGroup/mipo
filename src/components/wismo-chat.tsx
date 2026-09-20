@@ -62,19 +62,11 @@ function StatusCard({ result }: { result: WismoStatusResponse }) {
   );
 }
 
-function EscalationNotice({ result, interactionId, reason }: { result: WismoStatusResponse; interactionId: string; reason: string }) {
-  const protocol = `ATD-${interactionId.slice(0, 6).toUpperCase()}`;
+function EscalationNotice() {
   return (
-    <div className="wismo-escalation" role="status">
-      <p className="wismo-escalation__title"><span className="wismo-badge wismo-badge--escalated">Escalado para atendimento humano</span></p>
-      <p>Protocolo de demonstração <strong>{protocol}</strong>. O atendente recebe o caso com este contexto, sem você precisar repetir nada:</p>
-      <ul>
-        <li>Pedido {result.orderCode}</li>
-        <li>Status: {WISMO_STATUS_LABELS[result.status]}</li>
-        {result.lastTrackingEvent && <li>Último evento: {result.lastTrackingEvent}</li>}
-        <li>Motivo: {reason}</li>
-      </ul>
-    </div>
+    <p className="wismo-escalation" role="status">
+      <span className="wismo-badge wismo-badge--escalated">Escalado para atendimento humano</span>
+    </p>
   );
 }
 
@@ -106,12 +98,7 @@ function Bubble({ item, escalated, record, feedback, onRequestHuman, onResolutio
       <div className="mipo-bubble-body">
         <p>{item.text}</p>
         {kind === "result" && found && <StatusCard result={result} />}
-        {kind === "result" && found && result.needsEscalation && interactionId && (
-          <EscalationNotice result={result} interactionId={interactionId} reason={result.escalationReason ?? "Caso encaminhado pelo assistente"} />
-        )}
-        {kind === "escalation" && result && interactionId && (
-          <EscalationNotice result={result} interactionId={interactionId} reason={result.escalationReason ?? "Cliente solicitou atendimento humano"} />
-        )}
+        {((kind === "result" && found && result.needsEscalation) || kind === "escalation") && <EscalationNotice />}
         {canAskHuman && (
           <button type="button" className="mipo-suggestion-action" onClick={() => onRequestHuman(interactionId, result)}>
             {result.status === "delivered" ? "Não recebi meu pedido" : "Falar com o atendimento"}
@@ -131,7 +118,6 @@ function Bubble({ item, escalated, record, feedback, onRequestHuman, onResolutio
           </div>
         )}
         {kind === "result" && record?.state === "error" && <p className="wismo-record wismo-record--error">Atendimento não registrado no painel: {record.message}</p>}
-        {kind === "result" && record?.state === "saved" && <p className="wismo-record">Atendimento registrado no painel.</p>}
       </div>
     </div>
   );
@@ -221,7 +207,7 @@ export function WismoChat() {
 
   function askRating(interactionId: string, result: WismoStatusResponse) {
     setFeedbackFor(interactionId, { stage: "rating" });
-    push({ role: "assistant", kind: "rating", interactionId, result, text: "Para finalizar, de 1 a 5, qual nota você dá para este atendimento? (1 = muito ruim, 5 = muito bom)" });
+    push({ role: "assistant", kind: "rating", interactionId, result, text: "De 1 a 5, qual nota você dá para este atendimento?" });
   }
 
   function answerResolution(interactionId: string, result: WismoStatusResponse, resolution: WismoResolution, userText?: string) {
@@ -240,7 +226,7 @@ export function WismoChat() {
     if (feedbackRef.current[interactionId]?.stage !== "rating") return;
     setFeedbackFor(interactionId, { stage: "done", rating });
     push({ role: "user", text: `Nota ${rating} de 5.` });
-    push({ role: "assistant", kind: "thanks", interactionId, text: "Agradecemos a sua avaliação. Para consultar outro pedido, é só informar o código abaixo." });
+    push({ role: "assistant", kind: "thanks", interactionId, text: "Agradecemos a avaliação! Para consultar outro pedido, informe o código abaixo." });
     void record(interactionId, result);
   }
 
@@ -255,7 +241,7 @@ export function WismoChat() {
     if (feedbackRef.current[interactionId]) setFeedbackFor(interactionId, { resolution: "pending" });
     setEscalated((current) => ({ ...current, [interactionId]: true }));
     push({ role: "user", text: userText });
-    push({ role: "assistant", kind: "escalation", interactionId, result: { ...result, escalationReason: reason }, text: "Certo. Encaminhei o seu caso para uma pessoa do atendimento, já com o contexto do pedido." });
+    push({ role: "assistant", kind: "escalation", interactionId, result: { ...result, escalationReason: reason }, text: "Certo, encaminhei o seu caso para o atendimento." });
     void record(interactionId, result, { outcome: "escalated", reason });
   }
 
