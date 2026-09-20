@@ -16,7 +16,7 @@ type View = "catalog" | "product" | "cart" | "checkout" | "success";
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const textileElasticityLabel = { none: "sem elasticidade", low: "baixa", medium: "média", high: "alta", unknown: "não informada" } as const;
 
-function Icon({ name }: { name: "bag" | "arrow" | "spark" | "close" | "minus" | "plus" | "menu" }) {
+function Icon({ name }: { name: "bag" | "arrow" | "spark" | "close" | "minus" | "plus" | "menu" | "delivery" }) {
   const paths = {
     bag: <><path d="M5 8h14l-1 12H6L5 8Z"/><path d="M9 9V6a3 3 0 0 1 6 0v3"/></>,
     arrow: <><path d="M5 12h14"/><path d="m14 7 5 5-5 5"/></>,
@@ -25,6 +25,7 @@ function Icon({ name }: { name: "bag" | "arrow" | "spark" | "close" | "minus" | 
     minus: <path d="M5 12h14"/>,
     plus: <><path d="M5 12h14"/><path d="M12 5v14"/></>,
     menu: <><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/></>,
+    delivery: <><path d="M3 6h11v11H3Z"/><path d="M14 10h4l3 3v4h-7Z"/><circle cx="7" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></>,
   };
   return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">{paths[name]}</svg>;
 }
@@ -116,9 +117,14 @@ function Header({ cartCount, onNavigate }: { cartCount: number; onNavigate: (vie
         <button onClick={() => onNavigate("catalog")}>Coleção</button>
         <button onClick={() => onNavigate("catalog")}>Manifesto</button>
       </nav>
-      <div className="header-actions"><button className="bag-button" onClick={() => onNavigate("cart")} aria-label={`Abrir sacola com ${cartCount} itens`}>
-        <Icon name="bag" /><span>Sacola</span><b>{cartCount}</b>
-      </button></div>
+      <div className="header-actions">
+        <a className="order-tracking-link" href="/pedido" aria-label="Acompanhar meu pedido">
+          <Icon name="delivery" /><span>Acompanhar pedido</span>
+        </a>
+        <button className="bag-button" onClick={() => onNavigate("cart")} aria-label={`Abrir sacola com ${cartCount} itens`}>
+          <Icon name="bag" /><span>Sacola</span><b>{cartCount}</b>
+        </button>
+      </div>
     </header></>
   );
 }
