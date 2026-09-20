@@ -1257,7 +1257,6 @@ export function ManagerDashboard() {
                 </ResponsiveContainer>
               </ChartCard>
             </div>
-            <WismoOperations service={data.service} />
             <section className="mipo-funnel" aria-labelledby="funnel-title">
               <div>
                 <p className="manager-eyebrow">Funil MIPO</p>
@@ -1284,6 +1283,7 @@ export function ManagerDashboard() {
                 </div>
               ))}
             </section>
+            <WismoOperations service={data.service} />
             <section className="pilot-results" aria-labelledby="pilot-results-title">
               <header>
                 <div>

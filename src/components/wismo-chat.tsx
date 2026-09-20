@@ -2,11 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
+  WISMO_RATINGS,
   WISMO_STATUS_LABELS,
   isValidOrderCode,
   normalizeOrderCode,
   outcomeFor,
   type WismoOutcome,
+  type WismoRating,
+  type WismoResolution,
   type WismoStatusResponse,
 } from "@/src/domain/wismo-chat";
 import "./wismo-badge.css";
@@ -15,7 +18,11 @@ import { WISMO_MOCK_ENABLED, wismoApi } from "@/src/services/wismo-api";
 
 type ThreadItem =
   | { id: number; role: "user"; text: string }
-  | { id: number; role: "assistant"; text: string; kind: "greeting" | "notice" | "result" | "escalation"; interactionId?: string; result?: WismoStatusResponse };
+  | { id: number; role: "assistant"; text: string; kind: "greeting" | "notice" | "result" | "escalation" | "resolution" | "rating" | "thanks"; interactionId?: string; result?: WismoStatusResponse };
+
+/** Etapa do pós-atendimento: pergunta de pendência, nota de 1 a 5 e encerramento. */
+type Feedback = { stage: "question" | "rating" | "done"; resolution?: WismoResolution; rating?: WismoRating };
+type Override = { outcome: WismoOutcome; reason: string };
 
 type RecordState = { state: "saved" } | { state: "error"; message: string };
 
@@ -55,23 +62,25 @@ function StatusCard({ result }: { result: WismoStatusResponse }) {
   );
 }
 
-function EscalationNotice({ result, interactionId, reason }: { result: WismoStatusResponse; interactionId: string; reason: string }) {
-  const protocol = `ATD-${interactionId.slice(0, 6).toUpperCase()}`;
+function EscalationNotice() {
   return (
-    <div className="wismo-escalation" role="status">
-      <p className="wismo-escalation__title"><span className="wismo-badge wismo-badge--escalated">Escalado para atendimento humano</span></p>
-      <p>Protocolo de demonstração <strong>{protocol}</strong>. O atendente recebe o caso com este contexto, sem você precisar repetir nada:</p>
-      <ul>
-        <li>Pedido {result.orderCode}</li>
-        <li>Status: {WISMO_STATUS_LABELS[result.status]}</li>
-        {result.lastTrackingEvent && <li>Último evento: {result.lastTrackingEvent}</li>}
-        <li>Motivo: {reason}</li>
-      </ul>
-    </div>
+    <p className="wismo-escalation" role="status">
+      <span className="wismo-badge wismo-badge--escalated">Escalado para atendimento humano</span>
+    </p>
   );
 }
 
-function Bubble({ item, escalated, record, onRequestHuman }: { item: ThreadItem; escalated: boolean; record?: RecordState; onRequestHuman: (interactionId: string, result: WismoStatusResponse) => void }) {
+type BubbleProps = {
+  item: ThreadItem;
+  escalated: boolean;
+  record?: RecordState;
+  feedback?: Feedback;
+  onRequestHuman: (interactionId: string, result: WismoStatusResponse) => void;
+  onResolution: (interactionId: string, result: WismoStatusResponse, resolution: WismoResolution) => void;
+  onRating: (interactionId: string, result: WismoStatusResponse, rating: WismoRating) => void;
+};
+
+function Bubble({ item, escalated, record, feedback, onRequestHuman, onResolution, onRating }: BubbleProps) {
   if (item.role === "user") {
     return (
       <div className="mipo-chat-bubble mipo-chat-bubble--user">
@@ -89,19 +98,26 @@ function Bubble({ item, escalated, record, onRequestHuman }: { item: ThreadItem;
       <div className="mipo-bubble-body">
         <p>{item.text}</p>
         {kind === "result" && found && <StatusCard result={result} />}
-        {kind === "result" && found && result.needsEscalation && interactionId && (
-          <EscalationNotice result={result} interactionId={interactionId} reason={result.escalationReason ?? "Caso encaminhado pelo assistente"} />
-        )}
-        {kind === "escalation" && result && interactionId && (
-          <EscalationNotice result={result} interactionId={interactionId} reason={result.escalationReason ?? "Cliente solicitou atendimento humano"} />
-        )}
+        {((kind === "result" && found && result.needsEscalation) || kind === "escalation") && <EscalationNotice />}
         {canAskHuman && (
           <button type="button" className="mipo-suggestion-action" onClick={() => onRequestHuman(interactionId, result)}>
             {result.status === "delivered" ? "Não recebi meu pedido" : "Falar com o atendimento"}
           </button>
         )}
+        {kind === "resolution" && interactionId && result && feedback?.stage === "question" && (
+          <div className="mipo-chat-chips wismo-choices" role="group" aria-label="Situação do atendimento">
+            <button type="button" className="mipo-chip" onClick={() => onResolution(interactionId, result, "solved")}>Todos os problemas foram solucionados</button>
+            <button type="button" className="mipo-chip" onClick={() => onResolution(interactionId, result, "pending")}>Ainda há alguma pendência</button>
+          </div>
+        )}
+        {kind === "rating" && interactionId && result && feedback?.stage === "rating" && (
+          <div className="mipo-chat-chips wismo-choices" role="group" aria-label="Nota do atendimento de 1 a 5">
+            {WISMO_RATINGS.map((value) => (
+              <button key={value} type="button" className="mipo-chip" aria-label={`Nota ${value} de 5`} onClick={() => onRating(interactionId, result, value)}>{value}</button>
+            ))}
+          </div>
+        )}
         {kind === "result" && record?.state === "error" && <p className="wismo-record wismo-record--error">Atendimento não registrado no painel: {record.message}</p>}
-        {kind === "result" && record?.state === "saved" && <p className="wismo-record">Atendimento registrado no painel.</p>}
       </div>
     </div>
   );
@@ -116,6 +132,9 @@ export function WismoChat() {
   const [formError, setFormError] = useState("");
   const [escalated, setEscalated] = useState<Record<string, true>>({});
   const [records, setRecords] = useState<Record<string, RecordState>>({});
+  const [feedback, setFeedback] = useState<Record<string, Feedback>>({});
+  const feedbackRef = useRef<Record<string, Feedback>>({});
+  const overrideRef = useRef<Record<string, Override>>({});
   const nextId = useRef(1);
   const threadEnd = useRef<HTMLDivElement>(null);
 
@@ -128,15 +147,27 @@ export function WismoChat() {
     setItems((current) => [...current, { ...item, id: nextId.current++ } as ThreadItem]);
   }
 
-  async function record(interactionId: string, result: WismoStatusResponse, override?: { outcome: WismoOutcome; reason: string }) {
+  function setFeedbackFor(interactionId: string, patch: Partial<Feedback>) {
+    const current = feedbackRef.current[interactionId];
+    const next: Feedback = { ...current, ...patch, stage: patch.stage ?? current?.stage ?? "done" };
+    feedbackRef.current = { ...feedbackRef.current, [interactionId]: next };
+    setFeedback(feedbackRef.current);
+  }
+
+  async function record(interactionId: string, result: WismoStatusResponse, override?: Override) {
+    if (override) overrideRef.current[interactionId] = override;
+    const applied = overrideRef.current[interactionId];
+    const answers = feedbackRef.current[interactionId];
     try {
       await wismoApi.record({
         id: interactionId,
         orderCode: result.orderCode,
         status: result.status,
-        outcome: override?.outcome ?? outcomeFor(result),
-        escalationReason: override?.reason ?? result.escalationReason,
+        outcome: applied?.outcome ?? outcomeFor(result),
+        escalationReason: applied?.reason ?? result.escalationReason,
         dataOrigin: result.dataOrigin,
+        ...(answers?.resolution ? { resolution: answers.resolution } : {}),
+        ...(answers?.rating ? { rating: answers.rating } : {}),
       });
       setRecords((current) => ({ ...current, [interactionId]: { state: "saved" } }));
     } catch (error) {
@@ -160,6 +191,7 @@ export function WismoChat() {
       const interactionId = newId();
       push({ role: "assistant", kind: "result", text: result.customerMessage, interactionId, result });
       void record(interactionId, result);
+      if (outcomeFor(result) === "resolved") void askResolution(interactionId, result);
     } catch (error) {
       push({ role: "assistant", kind: "notice", text: error instanceof Error ? `Não consegui consultar o pedido agora. ${error.message}` : "Não consegui consultar o pedido agora. Tente novamente em instantes." });
     } finally {
@@ -167,11 +199,49 @@ export function WismoChat() {
     }
   }
 
-  function requestHuman(interactionId: string, result: WismoStatusResponse) {
-    const reason = "Cliente solicitou atendimento humano";
+  async function askResolution(interactionId: string, result: WismoStatusResponse) {
+    await pause(600);
+    setFeedbackFor(interactionId, { stage: "question" });
+    push({ role: "assistant", kind: "resolution", interactionId, result, text: "Ainda há alguma pendência ou todos os problemas foram solucionados?" });
+  }
+
+  function askRating(interactionId: string, result: WismoStatusResponse) {
+    setFeedbackFor(interactionId, { stage: "rating" });
+    push({ role: "assistant", kind: "rating", interactionId, result, text: "De 1 a 5, qual nota você dá para este atendimento?" });
+  }
+
+  function answerResolution(interactionId: string, result: WismoStatusResponse, resolution: WismoResolution, userText?: string) {
+    if (feedbackRef.current[interactionId]?.stage !== "question") return;
+    setFeedbackFor(interactionId, { resolution });
+    if (resolution === "solved") {
+      push({ role: "user", text: userText ?? "Todos os problemas foram solucionados." });
+      void record(interactionId, result);
+    } else {
+      requestHuman(interactionId, result, userText ?? "Ainda há alguma pendência.", "Cliente informou pendência após o atendimento");
+    }
+    askRating(interactionId, result);
+  }
+
+  function answerRating(interactionId: string, result: WismoStatusResponse, rating: WismoRating) {
+    if (feedbackRef.current[interactionId]?.stage !== "rating") return;
+    setFeedbackFor(interactionId, { stage: "done", rating });
+    push({ role: "user", text: `Nota ${rating} de 5.` });
+    push({ role: "assistant", kind: "thanks", interactionId, text: "Agradecemos a avaliação! Para consultar outro pedido, informe o código abaixo." });
+    void record(interactionId, result);
+  }
+
+  /** Botão "Falar com o atendimento": se a pergunta de pendência está aberta, conta como "ainda há pendência". */
+  function handleHumanButton(interactionId: string, result: WismoStatusResponse) {
+    if (feedbackRef.current[interactionId]?.stage === "question") answerResolution(interactionId, result, "pending", "Quero falar com o atendimento.");
+    else requestHuman(interactionId, result);
+  }
+
+  function requestHuman(interactionId: string, result: WismoStatusResponse, userText = "Quero falar com o atendimento.", reasonText = "Cliente solicitou atendimento humano") {
+    const reason = reasonText;
+    if (feedbackRef.current[interactionId]) setFeedbackFor(interactionId, { resolution: "pending" });
     setEscalated((current) => ({ ...current, [interactionId]: true }));
-    push({ role: "user", text: "Quero falar com o atendimento." });
-    push({ role: "assistant", kind: "escalation", interactionId, result: { ...result, escalationReason: reason }, text: "Certo. Encaminhei o seu caso para uma pessoa do atendimento, já com o contexto do pedido." });
+    push({ role: "user", text: userText });
+    push({ role: "assistant", kind: "escalation", interactionId, result: { ...result, escalationReason: reason }, text: "Certo, encaminhei o seu caso para o atendimento." });
     void record(interactionId, result, { outcome: "escalated", reason });
   }
 
@@ -180,7 +250,7 @@ export function WismoChat() {
       <h2 id="wismo-chat-title" className="sr-only">Conversa com o assistente de pedidos</h2>
       <div className="wismo-thread" role="log" aria-live="polite" aria-relevant="additions">
         {items.map((item) => (
-          <Bubble key={item.id} item={item} escalated={item.role === "assistant" && item.interactionId ? escalated[item.interactionId] === true : false} record={item.role === "assistant" && item.interactionId ? records[item.interactionId] : undefined} onRequestHuman={requestHuman} />
+          <Bubble key={item.id} item={item} escalated={item.role === "assistant" && item.interactionId ? escalated[item.interactionId] === true : false} record={item.role === "assistant" && item.interactionId ? records[item.interactionId] : undefined} feedback={item.role === "assistant" && item.interactionId ? feedback[item.interactionId] : undefined} onRequestHuman={handleHumanButton} onResolution={answerResolution} onRating={answerRating} />
         ))}
         {loading && (
           <div className="mipo-chat-bubble mipo-chat-bubble--assistant">

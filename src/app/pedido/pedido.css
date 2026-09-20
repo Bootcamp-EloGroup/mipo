@@ -25,10 +25,7 @@
 .wismo-card dd{margin:0;font-weight:600}
 .wismo-card__origin{margin:12px 0 0!important;color:var(--muted);font-size:10px}
 
-.wismo-escalation{padding:14px 16px;border:1px solid #d9ab94;border-radius:10px;background:#fbf0ea;font-size:12px}
-.wismo-escalation p{margin:0}
-.wismo-escalation__title{margin-bottom:10px!important}
-.wismo-escalation ul{margin:10px 0 0;padding-left:18px;color:#454740}
+.wismo-escalation{margin:10px 0 0}
 
 .wismo-record{color:var(--muted);font-size:10px}
 .wismo-record--error{color:var(--rust)}

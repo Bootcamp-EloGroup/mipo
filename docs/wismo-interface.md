@@ -47,3 +47,12 @@ Pontos a alinhar na integração: definir a tabela de atendimentos e mapear `Wis
 ## Simulador de impacto
 
 Entradas: volume de tickets, % resolvido pelo assistente, custo médio por ticket. Saída sempre rotulada como **Cenário** (`potentialCostAvoidedCents`), nunca como economia capturada.
+
+## Pós-atendimento: pendência e avaliação
+
+Quando o assistente resolve o pedido (sem escalonar), o chat faz duas perguntas em sequência:
+
+1. "Ainda há alguma pendência ou todos os problemas foram solucionados?" Se o cliente responde **pendência** (ou clica em "Falar com o atendimento" nesse momento), o caso é escalado para atendimento humano.
+2. "De 1 a 5, qual nota você dá para este atendimento?" (1 = muito ruim, 5 = muito bom).
+
+As respostas entram no mesmo `WismoEventInput` como campos **opcionais**: `resolution` (`solved | pending`) e `rating` (inteiro de 1 a 5). Reenviar o atendimento sem esses campos não apaga o que já foi respondido. O painel mostra "Sem pendência após o atendimento", "Avaliação média" e as colunas Pendência e Nota. Casos escalados automaticamente pelo motor e pedidos não encontrados não recebem essas perguntas. Os dados são de demonstração e não representam satisfação real de clientes.

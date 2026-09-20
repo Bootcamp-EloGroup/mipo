@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { ManagerDashboardData } from "@/src/domain/manager-dashboard";
-import { WISMO_OUTCOME_LABELS, WISMO_STATUS_LABELS, type WismoDashboardData } from "@/src/domain/wismo-chat";
+import { WISMO_OUTCOME_LABELS, WISMO_RESOLUTION_LABELS, WISMO_STATUS_LABELS, type WismoDashboardData } from "@/src/domain/wismo-chat";
 import { wismoApi } from "@/src/services/wismo-api";
 import { WismoImpactSimulator } from "@/src/components/wismo-impact-simulator";
+import { WismoSatisfaction } from "@/src/components/wismo-satisfaction";
 import "./wismo-badge.css";
 import "./wismo-operations.css";
 
@@ -31,6 +32,8 @@ export function WismoOperations({ service }: { service: Service }) {
   const [stats, setStats] = useState<WismoDashboardData>();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [recentOpen, setRecentOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -60,41 +63,68 @@ export function WismoOperations({ service }: { service: Service }) {
         </div>
       </header>
 
+      {stats?.sample && <div className="manager-empty"><strong>Dados de exemplo</strong><p>Prévia visual com números fictícios. Remova <code>?wismo=exemplo</code> da URL para ver os atendimentos reais.</p></div>}
       {error && <div className="manager-empty"><strong>Atendimentos WISMO indisponíveis</strong><p>{error}</p></div>}
       {!error && stats && !stats.available && <div className="manager-empty"><strong>Registro de atendimentos não habilitado</strong><p>{stats.reason}</p></div>}
       {!error && stats?.available && (
         <>
-          <div className="manager-kpis">
-            <Metric label="Atendimentos registrados" value={count.format(stats.total)} note="Consultas feitas no chat simulado" />
-            <Metric label="Resolvidos pelo assistente" value={count.format(stats.resolved)} note={stats.botResolutionRate === null ? "Sem atendimentos concluídos" : `${percent.format(stats.botResolutionRate)} dos casos encontrados`} />
-            <Metric label="Escalados" value={count.format(stats.escalated)} note="Sem atualização, inconclusivos ou pedidos do cliente" />
-            <Metric label="Pedido não encontrado" value={count.format(stats.notFound)} note="Código sem correspondência" />
-          </div>
-          {stats.byStatus.length > 0 && (
-            <ul className="wismo-ops__status" aria-label="Atendimentos por status logístico">
-              {stats.byStatus.map((item) => <li key={item.status}><span className={`wismo-badge wismo-badge--${item.status}`}>{WISMO_STATUS_LABELS[item.status]}</span> <strong>{count.format(item.count)}</strong></li>)}
-            </ul>
-          )}
-          {stats.recent.length > 0 ? (
-            <div className="manager-table-scroll wismo-ops__table">
-              <table>
-                <caption className="sr-only">Atendimentos WISMO recentes</caption>
-                <thead><tr><th>Momento</th><th>Pedido</th><th>Status</th><th>Resultado</th><th>Motivo do escalonamento</th></tr></thead>
-                <tbody>
-                  {stats.recent.map((row) => (
-                    <tr key={row.id}>
-                      <td><time dateTime={row.occurredAt}>{dateTime.format(new Date(row.occurredAt))}</time></td>
-                      <td>{row.orderCode}</td>
-                      <td><span className={`wismo-badge wismo-badge--${row.status}`}>{WISMO_STATUS_LABELS[row.status]}</span></td>
-                      <td>{WISMO_OUTCOME_LABELS[row.outcome]}</td>
-                      <td>{row.escalationReason ?? "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          <WismoSatisfaction />
+
+          <button type="button" className="wismo-details-toggle" aria-expanded={detailsOpen} aria-controls="wismo-details" onClick={() => setDetailsOpen((open) => !open)}>
+            {detailsOpen ? "Ocultar detalhamento" : "Ver detalhamento"}
+          </button>
+
+          {detailsOpen && (
+            <div id="wismo-details" className="wismo-details">
+              <div className="manager-kpis wismo-kpis">
+                <Metric label="Atendimentos registrados" value={count.format(stats.total)} note="Consultas feitas no chat simulado" />
+                <Metric label="Resolvidos pelo assistente" value={count.format(stats.resolved)} note={stats.botResolutionRate === null ? "Sem atendimentos concluídos" : `${percent.format(stats.botResolutionRate)} dos casos encontrados`} />
+                <Metric label="Escalados" value={count.format(stats.escalated)} note="Sem atualização, inconclusivos ou pedidos do cliente" />
+                <Metric label="Pedido não encontrado" value={count.format(stats.notFound)} note="Código sem correspondência" />
+              </div>
+              {stats.byStatus.length > 0 && (
+                <ul className="wismo-ops__status" aria-label="Atendimentos por status logístico">
+                  {stats.byStatus.map((item) => <li key={item.status}><span className={`wismo-badge wismo-badge--${item.status}`}>{WISMO_STATUS_LABELS[item.status]}</span> <strong>{count.format(item.count)}</strong></li>)}
+                </ul>
+              )}
+              <article className="wismo-recent">
+                <button type="button" className="wismo-recent__toggle" aria-expanded={recentOpen} aria-controls="wismo-recent-table" onClick={() => setRecentOpen((open) => !open)}>
+                  <span>
+                    <span className="manager-eyebrow">Registro</span>
+                    <strong>Atendimentos WISMO recentes</strong>
+                    <small>{stats.recent.length > 0 ? `${stats.recent.length} mais recentes` : "Nenhum atendimento ainda"}</small>
+                  </span>
+                  <span className="wismo-recent__plus" aria-hidden="true">{recentOpen ? "−" : "+"}</span>
+                </button>
+                {recentOpen && (
+                  <div id="wismo-recent-table">
+                    {stats.recent.length > 0 ? (
+                      <div className="manager-table-scroll wismo-ops__table">
+                        <table>
+                          <caption className="sr-only">Atendimentos WISMO recentes</caption>
+                          <thead><tr><th>Momento</th><th>Pedido</th><th>Status</th><th>Resultado</th><th>Pendência</th><th>Nota</th><th>Motivo do escalonamento</th></tr></thead>
+                          <tbody>
+                            {stats.recent.map((row) => (
+                              <tr key={row.id}>
+                                <td><time dateTime={row.occurredAt}>{dateTime.format(new Date(row.occurredAt))}</time></td>
+                                <td>{row.orderCode}</td>
+                                <td><span className={`wismo-badge wismo-badge--${row.status}`}>{WISMO_STATUS_LABELS[row.status]}</span></td>
+                                <td>{WISMO_OUTCOME_LABELS[row.outcome]}</td>
+                                <td>{row.resolution ? WISMO_RESOLUTION_LABELS[row.resolution] : "—"}</td>
+                                <td>{row.rating ? `${row.rating} / 5` : "—"}</td>
+                                <td>{row.escalationReason ?? "—"}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="manager-empty"><strong>Nenhum atendimento ainda</strong><p>Abra <a href="/pedido">/pedido</a>, consulte um pedido e atualize este bloco.</p></div>
+                    )}
+                  </div>
+                )}
+              </article>
             </div>
-          ) : (
-            <div className="manager-empty"><strong>Nenhum atendimento ainda</strong><p>Abra <a href="/pedido">/pedido</a>, consulte um pedido e atualize este bloco.</p></div>
           )}
         </>
       )}

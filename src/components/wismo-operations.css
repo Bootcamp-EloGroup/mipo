@@ -27,3 +27,27 @@
 @media(max-width:1100px){.wismo-ops .manager-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:820px){.wismo-ops__header{align-items:flex-start;flex-direction:column;gap:16px}.wismo-scenario .wismo-scenario__body{grid-template-columns:1fr;gap:28px}}
 @media(max-width:560px){.wismo-ops .manager-kpis{grid-template-columns:1fr}.wismo-ops__table{margin-inline:-14px;padding-inline:14px}}
+.wismo-range{display:flex;flex-wrap:wrap;gap:6px;align-self:flex-start}
+.wismo-range button{min-height:36px;padding:0 12px;border:1px solid var(--mgr-ink,#172018);background:transparent;color:inherit;cursor:pointer;font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.wismo-range button[aria-pressed="true"]{background:var(--mgr-ink,#172018);color:#fff}
+.wismo-satisfaction{display:grid;grid-template-columns:1.15fr .85fr;gap:14px;margin-top:14px;align-items:stretch}
+.wismo-satisfaction .chart-card header{flex-wrap:wrap}
+.wismo-satisfaction .chart-frame{height:210px}
+.wismo-satisfaction .chart-summary{min-height:0}
+.wismo-satisfaction__cards{display:grid;grid-template-rows:1fr 1fr;gap:14px}
+.wismo-satisfaction__cards .manager-metric{min-height:0}
+.wismo-dates{display:flex;flex-wrap:wrap;gap:12px;margin-top:12px}
+.wismo-dates label{display:grid;gap:4px;color:#62675e;font-size:8px;font-weight:800;letter-spacing:.09em;text-transform:uppercase}
+.wismo-dates input{min-height:36px;padding:0 8px;border:1px solid var(--mgr-line,#d5d2c7);background:var(--mgr-card,#fffef9);color:inherit;font-size:11px}
+.wismo-details-toggle{display:block;margin:14px 0 0;min-height:44px;padding:0 16px;border:1px solid var(--mgr-ink,#172018);background:transparent;color:inherit;cursor:pointer;font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.wismo-details-toggle:hover{background:var(--mgr-ink,#172018);color:#fff}
+.wismo-details{margin-top:14px}
+.wismo-kpis{grid-template-columns:repeat(4,minmax(0,1fr))}
+.wismo-recent{margin-top:14px;background:var(--mgr-card,#fffef9);border:1px solid var(--mgr-line,#d5d2c7)}
+.wismo-recent__toggle{display:flex;width:100%;align-items:center;justify-content:space-between;gap:16px;padding:18px 22px;border:0;background:transparent;color:inherit;cursor:pointer;text-align:left}
+.wismo-recent__toggle>span:first-child{display:grid;gap:4px}
+.wismo-recent__toggle strong{font:600 22px var(--display)}
+.wismo-recent__toggle small{color:#62675e;font-size:10px}
+.wismo-recent__plus{display:grid;place-items:center;flex:none;width:36px;height:36px;border:1px solid var(--mgr-ink,#172018);font-size:20px;line-height:1}
+.wismo-recent>div{padding:0 22px 22px}
+@media(max-width:820px){.wismo-satisfaction{grid-template-columns:1fr}.wismo-satisfaction__cards{grid-template-rows:auto}.wismo-kpis{grid-template-columns:1fr 1fr}}

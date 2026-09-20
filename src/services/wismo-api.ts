@@ -1,4 +1,5 @@
-import type { WismoDashboardData, WismoEventInput, WismoStatusResponse } from "@/src/domain/wismo-chat";
+import { summarizeRatings, type WismoDashboardData, type WismoEventInput, type WismoRatingsQuery, type WismoRatingsResponse, type WismoStatusResponse } from "@/src/domain/wismo-chat";
+import { WISMO_SAMPLE_DASHBOARD, sampleRatedEvents } from "@/src/domain/wismo-sample";
 import { fromEngineResponse, notFoundResponse, type EngineOrderResponse } from "@/src/services/wismo-adapter";
 import { mockWismoStatus } from "@/src/services/wismo-mock";
 
@@ -28,10 +29,18 @@ async function engineStatus(orderCode: string): Promise<WismoStatusResponse> {
   return fromEngineResponse((await response.json()) as EngineOrderResponse);
 }
 
+/** Prévia visual com dados fictícios: só com `?wismo=exemplo` na URL do painel. */
+const previewSample = () => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("wismo") === "exemplo";
+
 export const wismoApi = {
   status: (orderCode: string): Promise<WismoStatusResponse> =>
     WISMO_MOCK_ENABLED ? Promise.resolve(mockWismoStatus(orderCode)) : engineStatus(orderCode),
   record: (event: WismoEventInput) =>
     request<{ recorded: boolean }>("/api/wismo/events", { method: "POST", body: JSON.stringify(event) }),
-  stats: () => request<WismoDashboardData>("/api/wismo/events"),
+  ratings: (query: WismoRatingsQuery): Promise<WismoRatingsResponse> => {
+    if (previewSample()) return Promise.resolve({ available: true, sample: true, ...summarizeRatings(sampleRatedEvents(), query) });
+    const params = "range" in query ? `range=${query.range}` : `from=${encodeURIComponent(query.from)}&to=${encodeURIComponent(query.to)}`;
+    return request<WismoRatingsResponse>(`/api/wismo/ratings?${params}`);
+  },
+  stats: () => (previewSample() ? Promise.resolve(WISMO_SAMPLE_DASHBOARD) : request<WismoDashboardData>("/api/wismo/events")),
 };
