@@ -1,5 +1,5 @@
 import type { FitPreference, MipoThresholds, RiskResult } from "@/src/services/mipo";
-import type { Product, ProductVariant, SelectionContext } from "@/src/domain/commerce";
+import type { MeasurementFitAssessment, Product, ProductVariant, SelectionContext } from "@/src/domain/commerce";
 
 export const AGENT_ACTIONS = ["explain_evidence", "present_authorized_alternative", "suggest_add_to_cart", "no_intervention"] as const;
 export type AgentAction = typeof AGENT_ACTIONS[number];
@@ -13,6 +13,7 @@ export type AgentContext = {
   thresholds: MipoThresholds;
   deterministicResult: RiskResult;
   selectionContext?: SelectionContext;
+  measurementAssessment?: MeasurementFitAssessment;
 };
 
 export type AgentAnswer = {

@@ -1,5 +1,6 @@
-import type { Product, ProductVariant, SelectionContext, Size } from "@/src/domain/commerce";
+import type { BodyMeasurements, MeasurementFitAssessment, Product, ProductVariant, SelectionContext, Size } from "@/src/domain/commerce";
 import { getProductDecisionProfile } from "./product-profile";
+import { evaluateMeasurementFit } from "./measurement-fit";
 
 export type RiskResult = {
   risk: "size" | "quality" | "preference_mismatch" | "none" | "insufficient_evidence";
@@ -13,12 +14,36 @@ export type RiskResult = {
   alternativeProductId?: string;
   matchedPreferences?: string[];
   mismatchedPreferences?: string[];
+  measurementAssessment?: MeasurementFitAssessment;
 };
 
 export type FitPreference = "fitted" | "regular" | "loose";
 export type MipoThresholds = { highReturnRate: number; minimumImprovement: number; lowStockQuantity?: number; minimumSampleSize: number };
+export type CheckoutEvaluationContext = {
+  fitPreference?: FitPreference;
+  usualSize?: Size | null;
+  measurements?: BodyMeasurements;
+  thresholds?: MipoThresholds;
+};
 const sizeOrder = { P: 0, M: 1, G: 2, GG: 3 } as const;
 const defaultThresholds: MipoThresholds = { highReturnRate: 0.25, minimumImprovement: 0.08, lowStockQuantity: 3, minimumSampleSize: 30 };
+
+export function evaluateCheckout(product: Product, selected: ProductVariant, context: CheckoutEvaluationContext = {}): RiskResult {
+  const base = evaluateCheckoutRisk(product, selected, context.fitPreference, context.thresholds, context.usualSize);
+  if (!context.measurements || !selected.size) return base;
+  const assessment = evaluateMeasurementFit(product, context.measurements, context.fitPreference);
+  if (base.risk === "quality") return { ...base, measurementAssessment: assessment, evidence: `${base.evidence} ${assessment.evidence}` };
+  if (assessment.status === "insufficient_evidence" || assessment.status === "out_of_range") {
+    return { ...base, measurementAssessment: assessment, evidenceCoverage: Math.min(base.evidenceCoverage, assessment.coverage), evidence: `${assessment.evidence} ${base.evidence}`, message: assessment.evidence };
+  }
+  if (!assessment.recommendedSize) {
+    return { ...base, measurementAssessment: assessment, evidence: `${assessment.evidence} O tamanho de referência está sem estoque.`, message: "A grade indica uma referência, mas ela está indisponível. Mantenha sua escolha apenas se o caimento descrito fizer sentido para você." };
+  }
+  const recommendedVariant = product.variants.find((variant) => variant.size === assessment.recommendedSize && variant.inventory_quantity !== 0);
+  const matchesSelection = selected.size === assessment.recommendedSize;
+  if (matchesSelection) return { ...base, risk: "none", outcome: "good_match", level: "low", score: Math.max(base.score, 90), evidenceCoverage: Math.max(base.evidenceCoverage, assessment.coverage), evidence: assessment.evidence, message: `Suas medidas sustentam o tamanho ${selected.size}. ${assessment.status === "between_sizes" ? "A preferência de caimento foi usada para orientar a escolha entre tamanhos." : "As medidas convergem para esta referência."}`, measurementAssessment: assessment };
+  return { ...base, risk: "size", outcome: "attention", level: "medium", score: Math.max(base.score, 85), evidenceCoverage: Math.max(base.evidenceCoverage, assessment.coverage), evidence: assessment.evidence, message: assessment.status === "between_sizes" ? `Suas medidas ficam entre ${assessment.compatibleSizes.join(" e ")}. Para o caimento ${assessment.expectedFit === "loose" ? "mais solto" : assessment.expectedFit === "fitted" ? "mais ajustado" : "equilibrado"}, a referência mais segura é ${assessment.recommendedSize}.` : `As medidas informadas apontam para o tamanho ${assessment.recommendedSize}.`, recommendedVariant, measurementAssessment: assessment };
+}
 
 export function evaluateSelectionContext(product: Product, selected: ProductVariant, context: SelectionContext): RiskResult {
   const base = evaluateCheckoutRisk(product, selected);

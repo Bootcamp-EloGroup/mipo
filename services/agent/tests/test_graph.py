@@ -25,6 +25,13 @@ def test_execution_trace_has_observed_tool_durations(monkeypatch):
  assert [step.toolName for step in execution.steps[:3]]==["get_product_evidence","calculate_mipo_risk","get_allowed_actions"]
  assert all(step.durationMs>0 for step in execution.steps)
 
+def test_measurement_explanation_cannot_replace_deterministic_message(monkeypatch):
+ monkeypatch.delenv("ELOAGENTS_API_KEY",raising=False);monkeypatch.delenv("GROQ_API_KEY",raising=False)
+ data=fixture().model_dump();data["deterministicResult"].update({"risk":"size","message":"As medidas autorizam o tamanho G.","recommendedVariant":{**data["selected"],"size":"G"},"measurementAssessment":{"status":"between_sizes","compatibleSizes":["M","G"],"recommendedSize":"G"}});data["measurementAssessment"]=data["deterministicResult"]["measurementAssessment"]
+ request=AgentRequest.model_validate(data)
+ assert allowed_messages(request)==["As medidas autorizam o tamanho G."]
+ assert run_agent(request).message=="As medidas autorizam o tamanho G."
+
 def test_eloagents_failure_is_audited_before_groq_success(monkeypatch):
  from mipo_agent import graph as graph_module
  monkeypatch.setenv("ELOAGENTS_API_KEY","fake");monkeypatch.setenv("GROQ_API_KEY","fake")

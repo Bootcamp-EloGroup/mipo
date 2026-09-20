@@ -55,6 +55,7 @@ class RiskResult(BaseModel):
     outcome: Literal["good_match", "partial_match", "attention", "insufficient_evidence"] = "good_match"
     matchedPreferences: list[str] = Field(default_factory=list)
     mismatchedPreferences: list[str] = Field(default_factory=list)
+    measurementAssessment: dict[str, object] | None = None
 
 
 class AgentRequest(BaseModel):
@@ -68,6 +69,7 @@ class AgentRequest(BaseModel):
     selectionContext: dict[str, object] | None = None
     richExplanation: bool = False
     usualSize: Literal["P", "M", "G", "GG"] | str | None = None
+    measurementAssessment: dict[str, object] | None = None
 
 
 class AgentAnswer(BaseModel):

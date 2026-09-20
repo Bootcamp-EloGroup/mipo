@@ -128,34 +128,6 @@
 .toast-icon{display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,.25);font-size:11px;font-weight:800}
 
 /* Visual Sizer (Provador de Medidas Relativas) */
-.visual-sizer{margin:18px 0;padding:18px;background:linear-gradient(180deg,#faf9f5 0%,#f3f1e9 100%);border:1px solid #dcd9cd;border-radius:2px}
-.visual-sizer__header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap}
-.visual-sizer__title{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--olive)}
-.visual-sizer__title svg{width:15px;height:15px}
-.visual-sizer__metrics{display:flex;gap:4px}
-.visual-sizer__metric-tab{padding:4px 10px;font-size:10px;font-weight:700;letter-spacing:.05em;border:1px solid #cfcbbe;background:transparent;color:var(--muted);border-radius:2px;cursor:pointer;transition:.15s ease}
-.visual-sizer__metric-tab.is-active{background:var(--ink);color:#fff;border-color:var(--ink)}
-.visual-sizer__input-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px;flex-wrap:wrap}
-.visual-sizer__input-row label{font-size:12px;color:var(--ink)}
-.visual-sizer__input-row label strong{color:var(--olive);font-weight:800}
-.visual-sizer__presets{display:flex;gap:5px}
-.visual-sizer__preset-chip{padding:2px 8px;font-size:10px;font-weight:600;border:1px solid #dcd9cd;background:#fff;border-radius:2px;cursor:pointer;transition:.15s ease}
-.visual-sizer__preset-chip.is-selected{background:var(--olive);color:#fff;border-color:var(--olive)}
-.visual-sizer__slider{width:100%;height:6px;margin:8px 0 14px;accent-color:var(--olive);cursor:pointer}
-.visual-sizer__gauge{margin:10px 0 12px}
-.visual-sizer__gauge-track{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
-.visual-sizer__gauge-segment{padding:7px 4px;text-align:center;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;border:1px solid #dedad0;background:rgba(255,255,255,.6);color:#888478;border-radius:2px;transition:.2s ease}
-.visual-sizer__gauge-segment.is-active{background:#4e5841;color:#fff;border-color:#4e5841;box-shadow:0 2px 6px rgba(78,88,65,.25)}
-.visual-sizer__feedback{margin:8px 0 12px;font-size:12px;line-height:1.45;color:#494f46}
-.visual-sizer__size-matrix{display:flex;align-items:center;gap:10px;margin-top:10px;padding-top:12px;border-top:1px dashed #d5d1c4;flex-wrap:wrap}
-.visual-sizer__matrix-label{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
-.visual-sizer__matrix-buttons{display:flex;gap:6px}
-.visual-sizer__matrix-chip{display:flex;flex-direction:column;align-items:center;padding:5px 12px;min-width:48px;border:1px solid #cfcbbe;background:#fff;border-radius:2px;cursor:pointer;transition:.15s ease}
-.visual-sizer__matrix-chip b{font-size:12px;font-weight:800}
-.visual-sizer__matrix-chip small{font-size:8px;text-transform:uppercase;color:#787d72}
-.visual-sizer__matrix-chip.is-selected{border-color:var(--ink);background:var(--ink);color:#fff}
-.visual-sizer__matrix-chip.is-selected small{color:#cfd6c4}
-.visual-sizer__matrix-chip.is-recommended{border-color:var(--olive);outline:1px solid var(--olive)}
 
 /* Inline Cart Coherence Badges */
 .cart-item-coherence{display:inline-flex;align-items:center;gap:8px;margin-top:8px;padding:5px 10px;border-radius:2px;font-size:11px;line-height:1.3;animation:fadeIn .3s ease both;flex-wrap:wrap}
@@ -185,6 +157,26 @@
 .fit-assistant>summary svg{width:17px;height:17px;color:var(--olive)}
 .fit-assistant>summary small{grid-column:1;color:#596057;font-size:12px;line-height:1.4}
 .fit-assistant__body{padding:22px 18px;border-top:1px solid #d5d2c7;background:#f5f4ed}
+.measurement-intro{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;margin-bottom:20px}
+.measurement-intro .eyebrow{margin:0 0 5px;color:var(--olive);font-size:10px;letter-spacing:.14em}
+.measurement-intro h3{margin:0;font:600 21px/1.2 var(--display)}
+.measurement-intro>span{flex:none;padding:6px 9px;border:1px solid #cbd0bf;color:#526047;font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.measurement-fields{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+.measurement-fields>label{display:grid;gap:7px;color:#4d534a;font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase}
+.measurement-fields>label:not(.is-required){opacity:.72}
+.measurement-fields>label b{color:#8b4b32}
+.measurement-input{display:flex;align-items:center;min-height:50px;border:1px solid #c9c7bc;background:#fff;transition:border-color .18s ease,box-shadow .18s ease}
+.measurement-input:focus-within{border-color:var(--olive);box-shadow:0 0 0 3px rgba(78,88,65,.14)}
+.measurement-input input{min-width:0;width:100%;height:48px;padding:0 4px 0 13px;border:0;outline:0;background:transparent;color:var(--ink);font:600 18px var(--display)}
+.measurement-input small{padding-right:11px;color:#777c73;font-size:10px;text-transform:none}
+.measurement-howto{margin:0 0 22px;border-bottom:1px solid #d7d4c8}
+.measurement-howto summary{min-height:44px;display:flex;align-items:center;color:#46513f;font-size:12px;font-weight:800;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.measurement-howto ul{margin:0 0 16px;padding-left:18px;color:#565c54;font-size:12px;line-height:1.65}
+.measurement-submit{width:100%;min-height:52px;margin-top:2px;padding:0 16px;display:flex;align-items:center;justify-content:space-between;border:1px solid var(--ink);background:var(--ink);color:#fff;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;cursor:pointer}
+.measurement-submit:hover{background:var(--olive);border-color:var(--olive)}
+.measurement-submit svg{width:17px;height:17px}
+.measurement-privacy{margin:12px 0 0!important;padding-left:12px;border-left:2px solid #abb49d;color:#62685e!important;font-size:11px!important;line-height:1.5!important}
+.measurement-error{margin:0 0 10px!important;color:#843d27!important;font-weight:700}
 .fit-assistant .fit-picker{margin:0 0 22px}
 .fit-assistant .fit-picker legend{margin-bottom:10px;font-size:13px}
 .fit-assistant .fit-picker button{min-height:48px;font-size:12px}
@@ -218,6 +210,8 @@
   .size-picker>div button{min-height:54px}
   .fit-assistant>summary{grid-template-columns:1fr auto;padding:14px}
   .fit-assistant__body{padding:18px 14px}
+  .measurement-fields{grid-template-columns:1fr}
+  .measurement-intro h3{font-size:19px}
   .fit-assistant .fit-picker>div{grid-template-columns:repeat(2,1fr)}
   .fit-assistant .fit-picker:last-of-type>div{grid-template-columns:1fr}
   .mipo-card{grid-template-columns:44px 1fr;padding:18px 16px}

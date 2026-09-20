@@ -3,8 +3,8 @@ import { getOrCreateSessionId } from "@/src/lib/session";
 import { dataSource, supabaseRest } from "@/src/lib/supabase-rest";
 import { getProduct } from "@/src/server/store";
 import { runPythonAgent } from "@/src/server/mipo-python-agent";
-import { evaluateCheckoutRisk, evaluateSelectionContext, type FitPreference, type RiskResult } from "@/src/services/mipo";
-import type { SelectionContext, Size } from "@/src/domain/commerce";
+import { evaluateCheckout, evaluateSelectionContext, type FitPreference, type RiskResult } from "@/src/services/mipo";
+import type { BodyMeasurements, MeasurementFitAssessment, SelectionContext, Size } from "@/src/domain/commerce";
 import type { AgentAnswer } from "@/src/domain/agent";
 
 export const maxDuration = 60;
@@ -22,6 +22,10 @@ type Intervention = {
     message?: string;
     usualSize?: Size | null;
     selectionContext?: { preference: string; label: string; answers?: Record<string, string> };
+    measurementAssessment?: MeasurementFitAssessment;
+    score?: number;
+    evidenceCoverage?: number;
+    outcome?: RiskResult["outcome"];
   };
   message: string;
   rule_set_id: string;
@@ -59,6 +63,7 @@ export async function POST(request: Request) {
       const fitPreference = (body.fitPreference as FitPreference | undefined) ?? "regular";
       const usualSize = (body.usualSize as Size | undefined) ?? null;
       const selectionContext = body.selectionContext as SelectionContext | undefined;
+      const measurements = body.measurements as BodyMeasurements | undefined;
 
       if (!productId || !variantId) {
         return Response.json({ enabled: false });
@@ -72,7 +77,7 @@ export async function POST(request: Request) {
 
       const result = selectionContext
         ? evaluateSelectionContext(product, selected, selectionContext)
-        : evaluateCheckoutRisk(product, selected, fitPreference, undefined, usualSize);
+        : evaluateCheckout(product, selected, { fitPreference, usualSize, measurements });
 
       const answer: AgentAnswer = {
         action: "explain_evidence",
@@ -113,15 +118,12 @@ export async function POST(request: Request) {
       lowStockQuantity: rules[0].low_stock_quantity,
       minimumSampleSize: rules[0].minimum_sample_size,
     };
-    const result = intervention.evidence.selectionContext
+    const recomputed = intervention.evidence.selectionContext
       ? evaluateSelectionContext(product, selected, intervention.evidence.selectionContext)
-      : evaluateCheckoutRisk(
-          product,
-          selected,
-          intervention.fit_preference ?? "regular",
-          thresholds,
-          intervention.evidence.usualSize
-        );
+      : evaluateCheckout(product, selected, { fitPreference: intervention.fit_preference ?? "regular", thresholds, usualSize: intervention.evidence.usualSize });
+    const result: RiskResult = intervention.evidence.measurementAssessment
+      ? { ...recomputed, risk: intervention.risk_type, level: intervention.risk_level, outcome: intervention.evidence.outcome ?? recomputed.outcome, score: intervention.evidence.score ?? recomputed.score, evidenceCoverage: intervention.evidence.evidenceCoverage ?? recomputed.evidenceCoverage, evidence: intervention.evidence.message ?? recomputed.evidence, message: intervention.message, recommendedVariant: intervention.recommended_variant_id ? product.variants.find((variant) => variant.id === intervention.recommended_variant_id) : undefined, measurementAssessment: intervention.evidence.measurementAssessment }
+      : recomputed;
 
     if (result.risk !== intervention.risk_type || result.level !== intervention.risk_level) {
       return Response.json({ error: "A evidência atual diverge da intervenção registrada." }, { status: 409 });
@@ -135,6 +137,7 @@ export async function POST(request: Request) {
       thresholds,
       deterministicResult: result,
       selectionContext: intervention.evidence.selectionContext,
+      measurementAssessment: intervention.evidence.measurementAssessment,
     };
 
     let answer: AgentAnswer;

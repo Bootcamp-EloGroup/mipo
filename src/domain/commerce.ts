@@ -1,6 +1,27 @@
 import type { HttpTypes } from "@medusajs/types";
 
 export type Size = "P" | "M" | "G" | "GG";
+export type BodyMeasurements = { bust?: number; waist?: number; hip?: number };
+export type MeasurementMetric = keyof BodyMeasurements;
+export type SizeGuide = {
+  version: string;
+  origin: "provided" | "derived" | "synthetic";
+  unit: "cm";
+  ranges: Record<Size, Partial<Record<MeasurementMetric, [number, number]>>>;
+};
+export type MeasurementFitAssessment = {
+  status: "recommended" | "between_sizes" | "out_of_range" | "insufficient_evidence";
+  compatibleSizes: Size[];
+  recommendedSize?: Size;
+  limitingMeasurements: MeasurementMetric[];
+  requiredMeasurements: MeasurementMetric[];
+  providedMeasurements: MeasurementMetric[];
+  expectedFit: "fitted" | "regular" | "loose";
+  coverage: number;
+  evidence: string;
+  guideVersion: string;
+  guideOrigin: SizeGuide["origin"];
+};
 export type ProductQuestion = {
   id: string;
   label: string;

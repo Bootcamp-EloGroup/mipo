@@ -69,6 +69,8 @@ def clear_cache() -> None:
 
 def allowed_messages(r: AgentRequest) -> list[str]:
     x = r.deterministicResult
+    if r.measurementAssessment:
+        return [x.message]
     if x.risk == "preference_mismatch":
         return [x.message]
     if r.selectionContext and r.product.productKind != "apparel":
@@ -190,6 +192,8 @@ def _invoke_rich_generation(provider: str, key: str, model: str, base: str, requ
         f"Tamanho selecionado: {request.selected.size}\n"
         f"Preferência de caimento informada: {request.fitPreference}\n"
         f"Avaliação técnica: {request.deterministicResult.evidence}\n"
+        f"Avaliação de medidas autorizada (sem medidas brutas): {request.measurementAssessment}\n"
+        f"Perfil têxtil autorizado: {request.product.textileProfile}\n"
         f"Mensagem determinística autorizada: {request.deterministicResult.message}\n"
         f"REGRAS: NÃO invente descontos ou promessas; mantenha o tom sofisticado e assertivo; responda apenas com o texto da explicação."
     )

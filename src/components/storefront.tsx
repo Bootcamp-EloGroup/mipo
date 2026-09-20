@@ -3,11 +3,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { products as localProducts } from "@/src/data/products";
-import type { Cart, Product, ProductVariant, SelectionContext, Size } from "@/src/domain/commerce";
+import type { BodyMeasurements, Cart, Product, ProductVariant, SelectionContext, Size } from "@/src/domain/commerce";
 import { localCommerceRepository, recordMipoEvent } from "@/src/services/local-commerce";
 import { commerceApi } from "@/src/services/commerce-api";
-import { evaluateCheckoutRisk, evaluateSelectionContext, type RiskResult } from "@/src/services/mipo";
+import { evaluateCheckout, evaluateCheckoutRisk, evaluateSelectionContext, type RiskResult } from "@/src/services/mipo";
 import { productQuestions } from "@/src/services/product-profile";
+import { requiredMeasurements, VERTICE_SIZE_GUIDE } from "@/src/services/measurement-fit";
 import type { PilotGroup, PilotOrderResult } from "@/src/domain/pilot-checkout";
 
 type View = "catalog" | "product" | "cart" | "checkout" | "success";
@@ -173,193 +174,6 @@ function Catalog({ products, onProduct }: { products: Product[]; onProduct: (pro
   );
 }
 
-type BodyMetric = "bust" | "waist" | "hip";
-
-const SIZING_GUIDE: Record<BodyMetric, { label: string; ranges: Record<"P" | "M" | "G" | "GG", { min: number; max: number; ideal: number }> }> = {
-  bust: {
-    label: "Busto",
-    ranges: {
-      P: { min: 82, max: 88, ideal: 85 },
-      M: { min: 89, max: 95, ideal: 92 },
-      G: { min: 96, max: 102, ideal: 99 },
-      GG: { min: 103, max: 110, ideal: 106 },
-    },
-  },
-  waist: {
-    label: "Cintura",
-    ranges: {
-      P: { min: 64, max: 70, ideal: 67 },
-      M: { min: 71, max: 77, ideal: 74 },
-      G: { min: 78, max: 84, ideal: 81 },
-      GG: { min: 85, max: 92, ideal: 88 },
-    },
-  },
-  hip: {
-    label: "Quadril",
-    ranges: {
-      P: { min: 92, max: 98, ideal: 95 },
-      M: { min: 99, max: 105, ideal: 102 },
-      G: { min: 106, max: 112, ideal: 109 },
-      GG: { min: 113, max: 120, ideal: 116 },
-    },
-  },
-};
-
-function VisualSizer({
-  product,
-  selectedVariant,
-  onSelectVariant,
-}: {
-  product: Product;
-  selectedVariant: ProductVariant | null;
-  onSelectVariant: (variant: ProductVariant) => void;
-}) {
-  const isBottom = product.category === "Calças" || product.title.toLowerCase().includes("calça") || product.title.toLowerCase().includes("saia");
-  const defaultMetric: BodyMetric = isBottom ? "hip" : "bust";
-  const [metric, setMetric] = useState<BodyMetric>(defaultMetric);
-  const guide = SIZING_GUIDE[metric];
-
-  const [measurement, setMeasurement] = useState<number>(guide.ranges.M.ideal);
-
-  function handleMetricChange(nextMetric: BodyMetric) {
-    setMetric(nextMetric);
-    setMeasurement(SIZING_GUIDE[nextMetric].ranges.M.ideal);
-  }
-
-  const idealSizeMatch = (["P", "M", "G", "GG"] as const).find((s) => {
-    const r = guide.ranges[s];
-    return measurement >= r.min && measurement <= r.max;
-  }) ?? (measurement < guide.ranges.P.min ? "P" : "GG");
-
-  const currentSize = selectedVariant?.size as "P" | "M" | "G" | "GG" | undefined;
-  const currentRange = currentSize ? guide.ranges[currentSize] : undefined;
-
-  let fitStatus: "fitted" | "balanced" | "loose" = "balanced";
-  let fitDescription = "";
-
-  if (currentRange) {
-    if (measurement > currentRange.max) {
-      fitStatus = "fitted";
-      fitDescription = `Mais Ajustado — Sua medida de ${measurement}cm está acima da referência para ${currentSize} (${currentRange.min}–${currentRange.max}cm). O caimento será rente ao corpo.`;
-    } else if (measurement < currentRange.min) {
-      fitStatus = "loose";
-      fitDescription = `Fluido & Amplo — Sua medida de ${measurement}cm proporciona folga confortável no tamanho ${currentSize} (${currentRange.min}–${currentRange.max}cm), para um visual relaxado.`;
-    } else {
-      fitStatus = "balanced";
-      fitDescription = `Equilibrado & Ideal — No tamanho ${currentSize}, a peça vestirá precisamente a silhueta da modelagem Vértice para seus ${measurement}cm de ${guide.label.toLowerCase()}.`;
-    }
-  } else {
-    fitDescription = `Para ${measurement}cm de ${guide.label.toLowerCase()}, a modelagem sugerida de alfaiataria é ${idealSizeMatch}.`;
-  }
-
-  const presetValues = metric === "waist" ? [66, 72, 78, 86] : metric === "hip" ? [94, 100, 106, 114] : [84, 90, 96, 104];
-
-  return (
-    <div className="visual-sizer reveal">
-      <div className="visual-sizer__header">
-        <div className="visual-sizer__title">
-          <Icon name="spark" />
-          <span>Provador Visual de Medidas Relativas</span>
-        </div>
-        <div className="visual-sizer__metrics" role="tablist" aria-label="Medida corporal">
-          {(["bust", "waist", "hip"] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              className={`visual-sizer__metric-tab ${metric === m ? "is-active" : ""}`}
-              onClick={() => handleMetricChange(m)}
-            >
-              {SIZING_GUIDE[m].label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="visual-sizer__body">
-        <div className="visual-sizer__input-row">
-          <label htmlFor="body-measurement-slider">
-            Sua medida de {guide.label.toLowerCase()}: <strong>{measurement} cm</strong>
-          </label>
-          <div className="visual-sizer__presets">
-            {presetValues.map((val) => (
-              <button
-                key={val}
-                type="button"
-                className={`visual-sizer__preset-chip ${measurement === val ? "is-selected" : ""}`}
-                onClick={() => setMeasurement(val)}
-              >
-                {val} cm
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <input
-          id="body-measurement-slider"
-          type="range"
-          min={metric === "waist" ? 60 : metric === "hip" ? 86 : 76}
-          max={metric === "waist" ? 100 : metric === "hip" ? 126 : 116}
-          value={measurement}
-          onChange={(e) => setMeasurement(Number(e.target.value))}
-          className="visual-sizer__slider"
-          aria-label={`Ajustar medida de ${guide.label.toLowerCase()} em centímetros`}
-        />
-
-        {/* Visual Fit Gauge */}
-        <div className="visual-sizer__gauge">
-          <div className="visual-sizer__gauge-track">
-            <div
-              className={`visual-sizer__gauge-segment ${fitStatus === "fitted" ? "is-active" : ""}`}
-            >
-              <span>Ajustado</span>
-            </div>
-            <div
-              className={`visual-sizer__gauge-segment ${fitStatus === "balanced" ? "is-active" : ""}`}
-            >
-              <span>Equilibrado</span>
-            </div>
-            <div
-              className={`visual-sizer__gauge-segment ${fitStatus === "loose" ? "is-active" : ""}`}
-            >
-              <span>Fluido / Amplo</span>
-            </div>
-          </div>
-        </div>
-
-        <p className="visual-sizer__feedback">{fitDescription}</p>
-
-        {/* Quick Size Matrix Buttons */}
-        <div className="visual-sizer__size-matrix">
-          <span className="visual-sizer__matrix-label">Projeção por tamanho:</span>
-          <div className="visual-sizer__matrix-buttons">
-            {(["P", "M", "G", "GG"] as const).map((sizeKey) => {
-              const variant = product.variants.find((v) => v.size === sizeKey);
-              if (!variant) return null;
-              const r = guide.ranges[sizeKey];
-              const isSelected = selectedVariant?.id === variant.id;
-              const isRecommended = idealSizeMatch === sizeKey;
-              const relation = measurement > r.max ? "Ajustado" : measurement < r.min ? "Fluido" : "Ideal";
-
-              return (
-                <button
-                  key={sizeKey}
-                  type="button"
-                  className={`visual-sizer__matrix-chip ${isSelected ? "is-selected" : ""} ${isRecommended ? "is-recommended" : ""}`}
-                  onClick={() => onSelectVariant(variant)}
-                  title={`Selecionar tamanho ${sizeKey} (${relation})`}
-                >
-                  <b>{sizeKey}</b>
-                  <small>{relation}</small>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function ProductDetail({
   product,
   persistent,
@@ -385,6 +199,9 @@ function ProductDetail({
   const [interventionId, setInterventionId] = useState<string>();
   const [fitPreference, setFitPreference] = useState<"fitted" | "regular" | "loose">("regular");
   const [usualSize, setUsualSize] = useState<ProductVariant["size"]>(null);
+  const [measurements, setMeasurements] = useState<BodyMeasurements>({});
+  const [measurementDraft, setMeasurementDraft] = useState<Record<keyof BodyMeasurements, string>>({ bust: "", waist: "", hip: "" });
+  const [measurementError, setMeasurementError] = useState("");
   const [selectionContext, setSelectionContext] = useState<SelectionContext>();
   const [evaluating, setEvaluating] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
@@ -396,8 +213,19 @@ function ProductDetail({
   const sizePickerRef = useRef<HTMLFieldSetElement>(null);
 
   const isApparel = product.productKind === "apparel" || (!product.productKind && product.category !== "Maquiagem");
+  const requiredBodyMeasurements = requiredMeasurements(product);
 
-  async function choose(variant: ProductVariant, fit = fitPreference, userSize = usualSize) {
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem("mipo-body-measurements");
+      if (!saved) return;
+      const value = JSON.parse(saved) as BodyMeasurements;
+      setMeasurements(value);
+      setMeasurementDraft({ bust: value.bust?.toString() ?? "", waist: value.waist?.toString() ?? "", hip: value.hip?.toString() ?? "" });
+    } catch { /* perfil opcional: sessão inválida começa vazia */ }
+  }, []);
+
+  async function choose(variant: ProductVariant, fit = fitPreference, userSize = usualSize, bodyMeasurements = measurements) {
     if (variant.inventory_quantity === 0) return;
     setSelected(variant);
     setDecision(undefined);
@@ -425,13 +253,13 @@ function ProductDetail({
 
     try {
       if (persistent) {
-        const response = await commerceApi.evaluate(product.id, variant.id, fit, isApparel ? undefined : selectionContext, userSize);
+        const response = await commerceApi.evaluate(product.id, variant.id, fit, isApparel ? undefined : selectionContext, userSize, isApparel ? bodyMeasurements : undefined);
         initialResult = response.result;
         currentInterventionId = response.interventionId;
       } else {
         initialResult = selectionContext
           ? evaluateSelectionContext(product, variant, selectionContext)
-          : evaluateCheckoutRisk(product, variant, fit, undefined, userSize);
+          : evaluateCheckout(product, variant, { fitPreference: fit, usualSize: userSize, measurements: isApparel ? bodyMeasurements : undefined });
       }
     } catch (error) {
       setEvaluationError(error instanceof Error ? error.message : "Não foi possível avaliar esta escolha.");
@@ -452,6 +280,7 @@ function ProductDetail({
         fitPreference: fit,
         selectionContext: isApparel ? undefined : selectionContext,
         usualSize: userSize,
+        measurements: isApparel ? bodyMeasurements : undefined,
       });
 
       if (activeIntervention.current === currentInterventionId && !decisionRef.current) {
@@ -474,6 +303,15 @@ function ProductDetail({
         setAiLoading(false);
       }
     }
+  }
+
+  function applyMeasurements() {
+    const next = Object.fromEntries(Object.entries(measurementDraft).filter(([, value]) => value !== "").map(([key, value]) => [key, Number(value)])) as BodyMeasurements;
+    const missing = requiredBodyMeasurements.filter((metric) => next[metric] === undefined);
+    if (missing.length) { setMeasurementError("Preencha as medidas indicadas para esta peça."); return; }
+    setMeasurementError(""); setMeasurements(next);
+    sessionStorage.setItem("mipo-body-measurements", JSON.stringify(next));
+    if (selected) void choose(selected, fitPreference, usualSize, next);
   }
 
   // React to size suggestion from Concierge
@@ -552,19 +390,33 @@ function ProductDetail({
 
           {pilotGroup === "treatment" && isApparel && <details className="fit-assistant">
             <summary>
-              <span><Icon name="spark"/><b>Quer ajuda para decidir?</b></span>
-              <small>Conte seu tamanho habitual e o caimento desejado</small>
+              <span><Icon name="spark"/><b>Encontre seu tamanho</b></span>
+              <small>Medidas, tecido e caimento analisados com transparência</small>
             </summary>
             <div className="fit-assistant__body">
+              <div className="measurement-intro">
+                <div><p className="eyebrow">Perfil de medidas · centímetros</p><h3>Uma orientação feita para esta peça</h3></div>
+                <span>Só nesta sessão</span>
+              </div>
+              <div className="measurement-fields">
+                {(["bust", "waist", "hip"] as const).map((metric) => {
+                  const labels = { bust: "Busto", waist: "Cintura", hip: "Quadril" };
+                  const required = requiredBodyMeasurements.includes(metric);
+                  return <label key={metric} className={required ? "is-required" : ""}><span>{labels[metric]}{required && <b aria-hidden="true"> *</b>}</span><span className="measurement-input"><input type="number" inputMode="decimal" min={metric === "waist" ? 45 : metric === "hip" ? 70 : 60} max={metric === "waist" ? 150 : metric === "hip" ? 180 : 160} step="0.5" value={measurementDraft[metric]} onChange={(event) => setMeasurementDraft((current) => ({ ...current, [metric]: event.target.value }))} aria-required={required}/><small>cm</small></span></label>;
+                })}
+              </div>
+              <details className="measurement-howto"><summary>Como tirar suas medidas</summary><ul><li><b>Busto:</b> passe a fita pela parte mais ampla, sem apertar.</li><li><b>Cintura:</b> meça a região mais estreita do tronco.</li><li><b>Quadril:</b> contorne a parte mais ampla mantendo a fita nivelada.</li></ul></details>
               <fieldset className="fit-picker">
                 <legend>Seu tamanho habitual</legend>
-                <div>{(["P","M","G","GG"] as const).map((value) => <button type="button" key={value} aria-pressed={usualSize === value} className={usualSize === value ? "selected" : ""} onClick={() => { setUsualSize(value); if (selected) void choose(selected, fitPreference, value); }}>{value}</button>)}</div>
+                <div>{(["P","M","G","GG"] as const).map((value) => <button type="button" key={value} aria-pressed={usualSize === value} className={usualSize === value ? "selected" : ""} onClick={() => setUsualSize(value)}>{value}</button>)}</div>
               </fieldset>
               <fieldset className="fit-picker">
                 <legend>Como você gosta de vestir?</legend>
-                <div>{([["fitted","Mais ajustado"],["regular","Equilibrado"],["loose","Mais solto"]] as const).map(([value,label]) => <button type="button" key={value} aria-pressed={fitPreference === value} className={fitPreference === value ? "selected" : ""} onClick={() => { setFitPreference(value); if (selected) void choose(selected, value); }}>{label}</button>)}</div>
+                <div>{([["fitted","Mais ajustado"],["regular","Equilibrado"],["loose","Mais solto"]] as const).map(([value,label]) => <button type="button" key={value} aria-pressed={fitPreference === value} className={fitPreference === value ? "selected" : ""} onClick={() => setFitPreference(value)}>{label}</button>)}</div>
               </fieldset>
-              <p>Essas preferências refinam a orientação, mas você mantém a decisão final.</p>
+              {measurementError && <p className="measurement-error" role="alert">{measurementError}</p>}
+              <button type="button" className="measurement-submit" onClick={applyMeasurements}>{selected ? "Analisar meu caimento" : "Salvar medidas para analisar"}<Icon name="arrow"/></button>
+              <p className="measurement-privacy">Suas medidas ficam somente nesta sessão e não são gravadas no pedido, painel ou histórico. Guia {VERTICE_SIZE_GUIDE.version} · dados demonstrativos.</p>
               <button type="button" className="mipo-inline-concierge-btn" onClick={() => onOpenConcierge(product)}><Icon name="spark"/><span>Conversar com a MIPO Atelier</span></button>
             </div>
           </details>}
