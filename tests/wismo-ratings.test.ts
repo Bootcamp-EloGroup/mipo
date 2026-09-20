@@ -6,7 +6,7 @@ const NOW = new Date("2026-09-20T12:00:00Z");
 const daysAgo = (days: number) => new Date(NOW.getTime() - days * 86_400_000).toISOString();
 const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const event = (id: number, overrides: Record<string, unknown> = {}) => {
-  const parsed = parseWismoEventInput({ id: uuid(id), orderCode: "ORD-1001", status: "on_time", outcome: "resolved", dataOrigin: "mock", ...overrides });
+  const parsed = parseWismoEventInput({ id: uuid(id), orderCode: "ORD-DEMO-001", ...overrides });
   if (!parsed.ok) throw new Error(parsed.error);
   return parsed.value;
 };

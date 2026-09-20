@@ -50,7 +50,9 @@ function collect<T>(items: T[], keyOf: (item: T) => { key: string; label: string
     if (found) found.items.push(item);
     else groups.push({ key, label, items: [item] });
   }
-  return groups;
+  return groups
+    .map((group) => ({ ...group, items: [...group.items].sort((a, b) => keyOf(a).key.localeCompare(keyOf(b).key)) }))
+    .sort((a, b) => a.key.localeCompare(b.key));
 }
 
 const HEADERS = { month: "Mês", quarter: "Trimestre", year: "Ano" } as const;

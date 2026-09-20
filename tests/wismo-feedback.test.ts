@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { WismoEventNotFoundError, getWismoDashboardData, parseWismoEventInput, recordWismoEvent } from "../src/server/wismo-events";
 
 const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
-const valid = (overrides: Record<string, unknown> = {}) => ({ id: uuid(1), orderCode: "ORD-1001", status: "on_time", outcome: "resolved", dataOrigin: "mock", ...overrides });
+const valid = (overrides: Record<string, unknown> = {}) => ({ id: uuid(1), orderCode: "ORD-DEMO-001", ...overrides });
 const parse = (value: Record<string, unknown>) => {
   const parsed = parseWismoEventInput(value);
   if (!parsed.ok) throw new Error(parsed.error);
@@ -29,14 +29,14 @@ describe("resposta de pendência e nota do atendimento", () => {
 
   it("reenviar o atendimento sem resposta ou nota não apaga o que o cliente já informou", async () => {
     await recordWismoEvent("s1", parse(valid({ resolution: "pending", rating: 2 })), new Date("2026-09-20T10:00:00Z"));
-    await recordWismoEvent("s1", parse(valid({ outcome: "escalated", escalationReason: "Cliente solicitou atendimento humano" })), new Date("2026-09-20T10:05:00Z"));
+    await recordWismoEvent("s1", parse(valid({ requestHuman: true })), new Date("2026-09-20T10:05:00Z"));
     const data = await getWismoDashboardData();
     expect(data.recent[0]).toMatchObject({ outcome: "escalated", resolution: "pending", rating: 2 });
   });
 
   it("calcula pendências e nota média só com quem respondeu", async () => {
     await recordWismoEvent("s1", parse(valid({ id: uuid(1), resolution: "solved", rating: 5 })));
-    await recordWismoEvent("s1", parse(valid({ id: uuid(2), resolution: "pending", rating: 2, outcome: "escalated" })));
+    await recordWismoEvent("s1", parse(valid({ id: uuid(2), resolution: "pending", rating: 2, requestHuman: true })));
     await recordWismoEvent("s1", parse(valid({ id: uuid(3), resolution: "solved" })));
     await recordWismoEvent("s1", parse(valid({ id: uuid(4) })));
     const data = await getWismoDashboardData();

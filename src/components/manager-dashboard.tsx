@@ -204,6 +204,7 @@ export function ManagerDashboard() {
       const params = new URLSearchParams();
       if (filters.period === "custom") {
         const valid = !filters.from || !filters.to || filters.from <= filters.to;
+        if (!valid) return;
         if (valid && filters.from) params.set("from", filters.from);
         if (valid && filters.to) params.set("to", filters.to);
       } else if (filters.period !== "all") {

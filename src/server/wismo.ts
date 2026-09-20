@@ -50,9 +50,9 @@ export async function getRulerMatrix(runId: string): Promise<RulerLookup> {
   };
 }
 
-export async function getOrderByKey(key: string): Promise<(WismoOrder & { id: string }) | undefined> {
+export async function getOrderByKey(key: string, runId: string): Promise<(WismoOrder & { id: string }) | undefined> {
   if (dataSource() === "local") { const order = demoOrders.find((item) => item.orderKey === key); return order ? { ...order, id: `local-${key}` } : undefined; }
-  const rows = await supabaseRest<DbOrder[]>(`orders?source_order_key=eq.${encodeURIComponent(key)}&select=id,source_order_key,ordered_at,channel,customer_state,actual_delivery_days&limit=1`);
+  const rows = await supabaseRest<DbOrder[]>(`orders?source_order_key=eq.${encodeURIComponent(key)}&import_run_id=eq.${encodeURIComponent(runId)}&select=id,source_order_key,ordered_at,channel,customer_state,actual_delivery_days&limit=1`);
   const row = rows[0];
   return row ? { id: row.id, orderKey: row.source_order_key, orderedAt: row.ordered_at, channel: row.channel, customerState: row.customer_state, actualDeliveryDays: row.actual_delivery_days } : undefined;
 }

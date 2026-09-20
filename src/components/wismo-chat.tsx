@@ -162,10 +162,7 @@ export function WismoChat() {
       await wismoApi.record({
         id: interactionId,
         orderCode: result.orderCode,
-        status: result.status,
-        outcome: applied?.outcome ?? outcomeFor(result),
-        escalationReason: applied?.reason ?? result.escalationReason,
-        dataOrigin: result.dataOrigin,
+        requestHuman: applied?.outcome === "escalated",
         ...(answers?.resolution ? { resolution: answers.resolution } : {}),
         ...(answers?.rating ? { rating: answers.rating } : {}),
       });

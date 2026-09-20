@@ -1,7 +1,5 @@
 import "server-only";
 import {
-  WISMO_DATA_ORIGINS,
-  WISMO_OUTCOMES,
   WISMO_RESOLUTIONS,
   WISMO_STATUSES,
   emptyWismoDashboard,
@@ -19,6 +17,8 @@ import {
   type WismoStatus,
 } from "@/src/domain/wismo-chat";
 import { DataSourceUnavailableError, dataSource } from "@/src/lib/supabase-rest";
+import { getActiveWismoRuleSet, getLatestCompletedRunId, getOrderByKey, getRulerMatrix } from "@/src/server/wismo";
+import { evaluateDeliveryStatus } from "@/src/services/wismo";
 
 export class WismoEventNotFoundError extends Error {}
 
@@ -42,14 +42,10 @@ export function parseWismoEventInput(body: unknown): Parsed {
   if (typeof data.id !== "string" || !UUID.test(data.id)) return { ok: false, error: "id do atendimento deve ser um UUID." };
   const orderCode = typeof data.orderCode === "string" ? normalizeOrderCode(data.orderCode) : "";
   if (!isValidOrderCode(orderCode)) return { ok: false, error: "Código do pedido inválido." };
-  if (!isOneOf(WISMO_STATUSES, data.status)) return { ok: false, error: "Status WISMO inválido." };
-  if (!isOneOf(WISMO_OUTCOMES, data.outcome)) return { ok: false, error: "Resultado do atendimento inválido." };
-  if (!isOneOf(WISMO_DATA_ORIGINS, data.dataOrigin)) return { ok: false, error: "Origem dos dados inválida." };
-  let escalationReason: string | undefined;
-  if (data.escalationReason !== undefined && data.escalationReason !== null) {
-    if (typeof data.escalationReason !== "string" || data.escalationReason.length > 200) return { ok: false, error: "Motivo de escalonamento inválido." };
-    escalationReason = data.escalationReason.trim() || undefined;
+  if (["status", "outcome", "dataOrigin", "escalationReason"].some((field) => data[field] !== undefined)) {
+    return { ok: false, error: "Status, resultado e origem são calculados pelo servidor." };
   }
+  if (data.requestHuman !== undefined && typeof data.requestHuman !== "boolean") return { ok: false, error: "Solicitação de atendimento inválida." };
   let resolution: WismoResolution | undefined;
   if (data.resolution !== undefined && data.resolution !== null) {
     if (!isOneOf(WISMO_RESOLUTIONS, data.resolution)) return { ok: false, error: "Resposta de pendência inválida." };
@@ -65,10 +61,7 @@ export function parseWismoEventInput(body: unknown): Parsed {
     value: {
       id: data.id.toLowerCase(),
       orderCode,
-      status: data.status,
-      outcome: data.outcome,
-      dataOrigin: data.dataOrigin,
-      ...(escalationReason ? { escalationReason } : {}),
+      ...(data.requestHuman === true ? { requestHuman: true } : {}),
       ...(resolution ? { resolution } : {}),
       ...(rating ? { rating } : {}),
     },
@@ -85,10 +78,28 @@ export async function recordWismoEvent(sessionId: string, input: WismoEventInput
     if (oldest !== undefined) store.delete(oldest);
   }
   const timestamp = now.toISOString();
+  const authoritative = await resolveWismoEvent(input.orderCode, input.requestHuman === true, now);
   // Reenvios do mesmo atendimento sem resposta/nota não apagam o que o cliente já respondeu.
   const resolution = input.resolution ?? existing?.resolution;
   const rating = input.rating ?? existing?.rating;
-  store.set(input.id, { ...input, ...(resolution ? { resolution } : {}), ...(rating ? { rating } : {}), sessionId, occurredAt: existing?.occurredAt ?? timestamp, updatedAt: timestamp });
+  store.set(input.id, { ...input, ...authoritative, ...(resolution ? { resolution } : {}), ...(rating ? { rating } : {}), sessionId, occurredAt: existing?.occurredAt ?? timestamp, updatedAt: timestamp });
+}
+
+async function resolveWismoEvent(orderCode: string, requestHuman: boolean, now: Date): Promise<Pick<WismoEvent, "status" | "outcome" | "escalationReason" | "dataOrigin">> {
+  const runId = await getLatestCompletedRunId();
+  if (!runId) return { status: "inconclusive", outcome: "not_found", dataOrigin: dataSource() === "local" ? "mock" : "observed" };
+  const order = await getOrderByKey(orderCode, runId);
+  if (!order) return { status: "inconclusive", outcome: "not_found", dataOrigin: dataSource() === "local" ? "mock" : "observed" };
+  const [rule, matrix] = await Promise.all([getActiveWismoRuleSet(), getRulerMatrix(runId)]);
+  const result = evaluateDeliveryStatus(order, matrix.rulersFor(order.channel, order.customerState), now, rule.thresholds);
+  const status: WismoStatus = result.phase === "delivered" ? "delivered" : result.flag === "late" ? "delayed" : "on_time";
+  const escalated = requestHuman || result.escalate;
+  return {
+    status,
+    outcome: escalated ? "escalated" : "resolved",
+    ...(escalated ? { escalationReason: requestHuman ? "Atendimento humano solicitado pelo cliente." : result.message } : {}),
+    dataOrigin: dataSource() === "local" ? "mock" : "observed",
+  };
 }
 
 export async function getWismoDashboardData(): Promise<WismoDashboardData> {
@@ -111,7 +122,7 @@ export async function getWismoDashboardData(): Promise<WismoDashboardData> {
     ratedCount: rated.length,
     averageRating: rated.length > 0 ? rated.reduce((sum, event) => sum + (event.rating ?? 0), 0) / rated.length : null,
     byStatus,
-    recent: events.slice(0, RECENT_LIMIT).map(({ id, occurredAt, orderCode, status, outcome, escalationReason, dataOrigin, resolution, rating }) => ({ id, occurredAt, orderCode, status, outcome, escalationReason, dataOrigin, resolution, rating })),
+    recent: events.slice(0, RECENT_LIMIT).map(({ id, occurredAt, orderCode, status, outcome, escalationReason, dataOrigin, resolution, rating }) => ({ id, occurredAt, orderCode: `${orderCode.slice(0, 3)}•••${orderCode.slice(-2)}`, status, outcome, escalationReason, dataOrigin, resolution, rating })),
   };
 }
 

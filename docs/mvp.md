@@ -1,9 +1,10 @@
 # Relatorio do MVP - MIPO
 
-> **Status de escopo — setembro de 2026:** a entrega executável atual cobre a
-> jornada pré-compra. O fluxo pós-compra WISMO foi deliberadamente movido para
-> o backlog e não deve ser apresentado como funcionalidade implementada. As
-> seções WISMO abaixo descrevem o incremento futuro originalmente planejado.
+> **Status de escopo — setembro de 2026:** a entrega executável cobre a jornada
+> pré-compra e um incremento pós-compra WISMO. O WISMO usa régua logística
+> determinística e dados históricos ou demonstração explicitamente rotulada;
+> tracking em tempo real e persistência de atendimentos no Supabase permanecem
+> fora do escopo atual.
 
 ## 1. Resumo executivo
 
@@ -76,6 +77,8 @@ Em termos praticos, o MVP precisa demonstrar que:
 - Diagramas e arquitetura do fluxo ponta a ponta.
 - Concierge de moda e auditoria de sacola como capacidades experimentais,
   separadas do núcleo determinístico do MIPO.
+- Consulta WISMO por pedido, régua logística determinística, interface de
+  atendimento, indicadores locais e simulador de impacto rotulado como cenário.
 
 ### Fora do MVP
 
@@ -83,8 +86,8 @@ Em termos praticos, o MVP precisa demonstrar que:
 - Compra automatica ou reposicao automatica.
 - Logistica real em tempo real.
 - Chatbot generico para todos os assuntos.
-- Consulta e atendimento WISMO; permanece no backlog.
-- Integracao com tracking, prazo de pedido e escalonamento pos-compra.
+- Tracking logístico em tempo real e integração com transportadoras.
+- Persistência de atendimentos WISMO no Supabase; o modo atual é local/demo.
 - Previsao avancada de demanda.
 - Garantia de economia real capturada.
 - IA tomando decisoes criticas sem regras ou validacao humana.

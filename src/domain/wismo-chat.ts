@@ -77,17 +77,22 @@ export type WismoEventInput = {
   /** UUID gerado no cliente, um por consulta de pedido. */
   id: string;
   orderCode: string;
-  status: WismoStatus;
-  outcome: WismoOutcome;
-  escalationReason?: string;
-  dataOrigin: WismoDataOrigin;
+  /** Ação explícita do cliente; o servidor ainda recalcula status e origem. */
+  requestHuman?: boolean;
   /** Opcional: resposta do cliente após o atendimento. */
   resolution?: WismoResolution;
   /** Opcional: nota de 1 a 5 dada pelo cliente. */
   rating?: WismoRating;
 };
 
-export type WismoEvent = WismoEventInput & { occurredAt: string; updatedAt: string };
+export type WismoEvent = WismoEventInput & {
+  status: WismoStatus;
+  outcome: WismoOutcome;
+  escalationReason?: string;
+  dataOrigin: WismoDataOrigin;
+  occurredAt: string;
+  updatedAt: string;
+};
 
 export type WismoDashboardData = {
   /** false quando o registro de atendimentos não está habilitado no modo de dados atual. */
