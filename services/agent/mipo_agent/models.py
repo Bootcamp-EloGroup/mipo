@@ -8,8 +8,8 @@ Risk = Literal["size", "quality", "preference_mismatch", "none", "insufficient_e
 class Variant(BaseModel):
     id: str
     size: Literal["P", "M", "G", "GG"] | None = None
-    returnRate: float
-    defectRate: float
+    returnRate: float = 0.0
+    defectRate: float = 0.0
     inventory_quantity: int | None = None
     salesCount: int | None = None
     evidenceOrigin: Literal["provided", "derived", "synthetic"] | None = None
@@ -22,7 +22,7 @@ class TextileProfile(BaseModel):
     structure: Literal["fluid", "balanced", "structured", "unknown"] = "unknown"
     drape: str | None = None
     care: list[str] = Field(default_factory=list)
-    origin: Literal["provided", "derived", "synthetic"]
+    origin: Literal["provided", "derived", "synthetic"] = "provided"
     evidence: list[str] = Field(default_factory=list)
 
 
