@@ -16,6 +16,18 @@ export const VERTICE_SIZE_GUIDE: SizeGuide = {
 };
 
 const metricLabels = { bust: "busto", waist: "cintura", hip: "quadril" } as const;
+export const measurementLimits: Record<keyof BodyMeasurements, [number, number]> = { bust: [70, 160], waist: [50, 150], hip: [75, 180] };
+
+export function measurementFieldError(metric: keyof BodyMeasurements, value: number | undefined): string | undefined {
+  if (value === undefined || !Number.isFinite(value)) return `Informe a medida de ${metricLabels[metric]}.`;
+  const [min, max] = measurementLimits[metric];
+  return value < min || value > max ? `Confira a medida: use um valor entre ${min} e ${max} cm.` : undefined;
+}
+
+export function guideRange(metric: keyof BodyMeasurements, guide: SizeGuide = VERTICE_SIZE_GUIDE): [number, number] {
+  const values = sizes.flatMap((size) => guide.ranges[size][metric] ?? []);
+  return [Math.min(...values), Math.max(...values)];
+}
 
 export function requiredMeasurements(product: Product): Array<keyof BodyMeasurements> {
   const value = `${product.category} ${product.subcategory ?? ""} ${product.title}`.toLocaleLowerCase("pt-BR");
@@ -25,12 +37,11 @@ export function requiredMeasurements(product: Product): Array<keyof BodyMeasurem
 }
 
 export function validateMeasurements(measurements: BodyMeasurements): string[] {
-  const limits: Record<keyof BodyMeasurements, [number, number]> = { bust: [60, 160], waist: [45, 150], hip: [70, 180] };
-  return (Object.keys(limits) as Array<keyof BodyMeasurements>).flatMap((metric) => {
+  return (Object.keys(measurementLimits) as Array<keyof BodyMeasurements>).flatMap((metric) => {
     const value = measurements[metric];
     if (value === undefined) return [];
-    const [min, max] = limits[metric];
-    return !Number.isFinite(value) || value < min || value > max ? [`Informe ${metricLabels[metric]} entre ${min} e ${max} cm.`] : [];
+    const error = measurementFieldError(metric, value);
+    return error ? [`${metricLabels[metric][0].toUpperCase()}${metricLabels[metric].slice(1)}: ${error}`] : [];
   });
 }
 
@@ -46,7 +57,10 @@ export function evaluateMeasurementFit(product: Product, measurements: BodyMeasu
     const index = sizes.findIndex((size) => value >= guide.ranges[size][metric]![0] && value <= guide.ranges[size][metric]![1]);
     return { metric, index, value };
   });
-  if (positions.some(({ index }) => index < 0)) return { ...base, status: "out_of_range", coverage: 1, limitingMeasurements: positions.filter(({ index }) => index < 0).map(({ metric }) => metric), evidence: "Uma ou mais medidas estão fora da grade demonstrativa P–GG. Não vamos estimar um tamanho sem referência." };
+  if (positions.some(({ index }) => index < 0)) {
+    const outside = positions.filter(({ index }) => index < 0).map(({ metric, value }) => { const [low, high] = guideRange(metric, guide); return `${metricLabels[metric]} ${value < low ? "abaixo" : "acima"} da referência ${low}–${high} cm`; });
+    return { ...base, status: "out_of_range", coverage: 1, limitingMeasurements: positions.filter(({ index }) => index < 0).map(({ metric }) => metric), evidence: `${outside.join("; ")}. Confira como medir ou converse com a MIPO; não vamos estimar um tamanho sem referência.` };
+  }
 
   const indexes = positions.map(({ index }) => index);
   const min = Math.min(...indexes); const max = Math.max(...indexes);

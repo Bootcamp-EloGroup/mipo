@@ -8,7 +8,7 @@ import { localCommerceRepository, recordMipoEvent } from "@/src/services/local-c
 import { commerceApi } from "@/src/services/commerce-api";
 import { evaluateCheckout, evaluateCheckoutRisk, evaluateSelectionContext, type RiskResult } from "@/src/services/mipo";
 import { productQuestions } from "@/src/services/product-profile";
-import { requiredMeasurements, VERTICE_SIZE_GUIDE } from "@/src/services/measurement-fit";
+import { guideRange, measurementFieldError, measurementLimits, requiredMeasurements, VERTICE_SIZE_GUIDE } from "@/src/services/measurement-fit";
 import type { PilotGroup, PilotOrderResult } from "@/src/domain/pilot-checkout";
 
 type View = "catalog" | "product" | "cart" | "checkout" | "success";
@@ -202,6 +202,8 @@ function ProductDetail({
   const [measurements, setMeasurements] = useState<BodyMeasurements>({});
   const [measurementDraft, setMeasurementDraft] = useState<Record<keyof BodyMeasurements, string>>({ bust: "", waist: "", hip: "" });
   const [measurementError, setMeasurementError] = useState("");
+  const [measurementErrors, setMeasurementErrors] = useState<Partial<Record<keyof BodyMeasurements, string>>>({});
+  const [measurementsSaved, setMeasurementsSaved] = useState(false);
   const [selectionContext, setSelectionContext] = useState<SelectionContext>();
   const [evaluating, setEvaluating] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
@@ -211,6 +213,7 @@ function ProductDetail({
   const activeIntervention = useRef<string|undefined>(undefined);
   const decisionRef = useRef<typeof decision>(undefined);
   const sizePickerRef = useRef<HTMLFieldSetElement>(null);
+  const measurementFieldsRef = useRef<HTMLFieldSetElement>(null);
 
   const isApparel = product.productKind === "apparel" || (!product.productKind && product.category !== "Maquiagem");
   const requiredBodyMeasurements = requiredMeasurements(product);
@@ -222,6 +225,7 @@ function ProductDetail({
       const value = JSON.parse(saved) as BodyMeasurements;
       setMeasurements(value);
       setMeasurementDraft({ bust: value.bust?.toString() ?? "", waist: value.waist?.toString() ?? "", hip: value.hip?.toString() ?? "" });
+      setMeasurementsSaved(true);
     } catch { /* perfil opcional: sessão inválida começa vazia */ }
   }, []);
 
@@ -305,13 +309,24 @@ function ProductDetail({
     }
   }
 
-  function applyMeasurements() {
+  async function applyMeasurements() {
     const next = Object.fromEntries(Object.entries(measurementDraft).filter(([, value]) => value !== "").map(([key, value]) => [key, Number(value)])) as BodyMeasurements;
-    const missing = requiredBodyMeasurements.filter((metric) => next[metric] === undefined);
-    if (missing.length) { setMeasurementError("Preencha as medidas indicadas para esta peça."); return; }
-    setMeasurementError(""); setMeasurements(next);
+    const errors = Object.fromEntries(requiredBodyMeasurements.map((metric) => [metric, measurementFieldError(metric, next[metric])]).filter((entry): entry is [keyof BodyMeasurements, string] => Boolean(entry[1])));
+    if (Object.keys(errors).length) {
+      setMeasurementErrors(errors); setMeasurementError("Revise os campos destacados antes de analisar.");
+      requestAnimationFrame(() => measurementFieldsRef.current?.querySelector<HTMLInputElement>("[aria-invalid='true']")?.focus());
+      return;
+    }
+    if (!selected) { setMeasurementError("Escolha um tamanho acima para compararmos com suas medidas."); sizePickerRef.current?.focus(); return; }
+    setMeasurementError(""); setMeasurementErrors({}); setMeasurements(next); setMeasurementsSaved(true); setEvaluating(true);
     sessionStorage.setItem("mipo-body-measurements", JSON.stringify(next));
-    if (selected) void choose(selected, fitPreference, usualSize, next);
+    try { await choose(selected, fitPreference, usualSize, next); } finally { setEvaluating(false); }
+  }
+
+  function clearMeasurements() {
+    const empty = { bust: "", waist: "", hip: "" };
+    setMeasurements({}); setMeasurementDraft(empty); setMeasurementErrors({}); setMeasurementError(""); setMeasurementsSaved(false); setResult(null);
+    sessionStorage.removeItem("mipo-body-measurements");
   }
 
   // React to size suggestion from Concierge
@@ -395,17 +410,23 @@ function ProductDetail({
             </summary>
             <div className="fit-assistant__body">
               <div className="measurement-intro">
-                <div><p className="eyebrow">Perfil de medidas · centímetros</p><h3>Uma orientação feita para esta peça</h3></div>
-                <span>Só nesta sessão</span>
+                <div><p className="eyebrow">Provador MIPO · etapa única</p><h3>Compare suas medidas com a modelagem</h3><p>Use uma fita métrica sem apertar. Os campos marcados são necessários para {product.title}.</p></div>
+                <span className={measurementsSaved ? "is-saved" : ""}>{measurementsSaved ? "Perfil salvo" : "Só nesta sessão"}</span>
               </div>
-              <div className="measurement-fields">
+              <div className="measurement-signals" aria-label="Sinais considerados pela análise">
+                <span><b>01</b> Suas medidas</span><span><b>02</b> Caimento desejado</span><span><b>03</b> Tecido & elasticidade</span>
+              </div>
+              <fieldset className="measurement-fields" ref={measurementFieldsRef}>
+                <legend>Medidas corporais em centímetros</legend>
                 {(["bust", "waist", "hip"] as const).map((metric) => {
                   const labels = { bust: "Busto", waist: "Cintura", hip: "Quadril" };
                   const required = requiredBodyMeasurements.includes(metric);
-                  return <label key={metric} className={required ? "is-required" : ""}><span>{labels[metric]}{required && <b aria-hidden="true"> *</b>}</span><span className="measurement-input"><input type="number" inputMode="decimal" min={metric === "waist" ? 45 : metric === "hip" ? 70 : 60} max={metric === "waist" ? 150 : metric === "hip" ? 180 : 160} step="0.5" value={measurementDraft[metric]} onChange={(event) => setMeasurementDraft((current) => ({ ...current, [metric]: event.target.value }))} aria-required={required}/><small>cm</small></span></label>;
+                  const [min, max] = measurementLimits[metric]; const [guideMin, guideMax] = guideRange(metric);
+                  const inputId = `measurement-${metric}`; const helperId = `${inputId}-help`; const errorId = `${inputId}-error`;
+                  return <label key={metric} htmlFor={inputId} className={`${required ? "is-required" : ""} ${measurementErrors[metric] ? "has-error" : ""}`}><span>{labels[metric]} <em>{required ? "obrigatória" : "opcional"}</em></span><span className="measurement-input"><input id={inputId} name={metric} type="number" inputMode="decimal" autoComplete="off" min={min} max={max} step="0.5" value={measurementDraft[metric]} onChange={(event) => { setMeasurementDraft((current) => ({ ...current, [metric]: event.target.value })); setMeasurements({}); setMeasurementsSaved(false); setMeasurementErrors((current) => ({ ...current, [metric]: undefined })); }} onBlur={() => { if (!required && !measurementDraft[metric]) return; const error = measurementFieldError(metric, measurementDraft[metric] ? Number(measurementDraft[metric]) : undefined); setMeasurementErrors((current) => ({ ...current, [metric]: error })); }} aria-required={required} aria-invalid={Boolean(measurementErrors[metric])} aria-describedby={measurementErrors[metric] ? `${helperId} ${errorId}` : helperId}/><small>cm</small></span><small id={helperId} className="measurement-helper">Guia P–GG: {guideMin}–{guideMax} cm</small>{measurementErrors[metric] && <small id={errorId} className="measurement-field-error" role="alert">{measurementErrors[metric]}</small>}</label>;
                 })}
-              </div>
-              <details className="measurement-howto"><summary>Como tirar suas medidas</summary><ul><li><b>Busto:</b> passe a fita pela parte mais ampla, sem apertar.</li><li><b>Cintura:</b> meça a região mais estreita do tronco.</li><li><b>Quadril:</b> contorne a parte mais ampla mantendo a fita nivelada.</li></ul></details>
+              </fieldset>
+              <details className="measurement-howto"><summary>Como medir corretamente</summary><ul><li><b>Busto:</b> passe a fita pela parte mais ampla, sem apertar.</li><li><b>Cintura:</b> meça a região mais estreita do tronco.</li><li><b>Quadril:</b> contorne a parte mais ampla mantendo a fita nivelada.</li></ul></details>
               <fieldset className="fit-picker">
                 <legend>Seu tamanho habitual</legend>
                 <div>{(["P","M","G","GG"] as const).map((value) => <button type="button" key={value} aria-pressed={usualSize === value} className={usualSize === value ? "selected" : ""} onClick={() => setUsualSize(value)}>{value}</button>)}</div>
@@ -415,9 +436,10 @@ function ProductDetail({
                 <div>{([["fitted","Mais ajustado"],["regular","Equilibrado"],["loose","Mais solto"]] as const).map(([value,label]) => <button type="button" key={value} aria-pressed={fitPreference === value} className={fitPreference === value ? "selected" : ""} onClick={() => setFitPreference(value)}>{label}</button>)}</div>
               </fieldset>
               {measurementError && <p className="measurement-error" role="alert">{measurementError}</p>}
-              <button type="button" className="measurement-submit" onClick={applyMeasurements}>{selected ? "Analisar meu caimento" : "Salvar medidas para analisar"}<Icon name="arrow"/></button>
-              <p className="measurement-privacy">Suas medidas ficam somente nesta sessão e não são gravadas no pedido, painel ou histórico. Guia {VERTICE_SIZE_GUIDE.version} · dados demonstrativos.</p>
-              <button type="button" className="mipo-inline-concierge-btn" onClick={() => onOpenConcierge(product)}><Icon name="spark"/><span>Conversar com a MIPO Atelier</span></button>
+              {!selected && <p className="measurement-prerequisite">Selecione um tamanho acima para a MIPO comparar sua escolha com o perfil informado.</p>}
+              <button type="button" className="measurement-submit" onClick={() => void applyMeasurements()} disabled={evaluating || !selected}>{evaluating ? <><span>Analisando caimento…</span><span className="button-spinner" aria-hidden="true"/></> : <><span>Analisar medidas & caimento</span><Icon name="arrow"/></>}</button>
+              <div className="measurement-secondary-actions"><button type="button" onClick={() => onOpenConcierge(product)}><Icon name="spark"/><span>Falar com a MIPO</span></button>{measurementsSaved && <button type="button" onClick={clearMeasurements}>Limpar medidas</button>}</div>
+              <p className="measurement-privacy">Privacidade: os valores ficam somente nesta sessão e não entram no pedido, painel ou histórico. Guia {VERTICE_SIZE_GUIDE.version} · referência demonstrativa.</p>
             </div>
           </details>}
 
@@ -447,7 +469,7 @@ function ProductDetail({
 
           {/* Feedback State 2: Final Evaluated AI Response (no preliminary flashing) */}
           {selected && result && (
-            <aside className={`mipo-card mipo-card--${result.risk} reveal`} aria-live="polite">
+            <aside className={`mipo-card mipo-card--${result.risk} ${result.measurementAssessment?.status === "out_of_range" ? "mipo-card--measurement-warning" : ""} reveal`} aria-live="polite">
               <div className="mipo-card__mark"><Icon name="spark" /></div>
               <div>
                 <p className="mipo-label">Escolha assistida · MIPO {aiLoading ? <span>· Refinando explicação…</span> : aiAssisted && <span>· Explicação contextual por IA</span>}</p>
@@ -457,6 +479,7 @@ function ProductDetail({
                   <p>{result.evidence}</p>
                   <small>Regra determinística · score {result.score}/100 · cobertura de evidência {Math.round(result.evidenceCoverage * 100)}%</small>
                 </details>
+                {result.measurementAssessment?.status === "out_of_range" && <div className="mipo-recovery"><p>Você ainda pode manter sua escolha. Para uma orientação mais precisa:</p><div><button type="button" onClick={() => measurementFieldsRef.current?.querySelector<HTMLInputElement>("input")?.focus()}>Revisar medidas</button><button type="button" className="quiet" onClick={() => onOpenConcierge(product)}>Conversar com a MIPO</button></div></div>}
                 {(result.recommendedVariant || result.alternativeProductId) && !decision && <div className="mipo-actions">
                   {result.recommendedVariant && <button type="button" disabled={decisionLoading} onClick={acceptRecommendation}>{decisionLoading ? "Aplicando tamanho…" : `Usar tamanho ${result.recommendedVariant.size}`}</button>}
                   {result.alternativeProductId && <button type="button" onClick={() => onAlternative(result.alternativeProductId!)}>Ver alternativa</button>}

@@ -20,10 +20,10 @@ export const products: Product[] = [
     imageKey: "aurora",
     alternativeProductId: "prod_sereno",
     variants: [
-      { id: "var_aurora_p", title: "P", sku: "AUR-P", size: "P", price: 42900, inventory_quantity: 6, returnRate: 0.17, defectRate: 0.03 },
-      { id: "var_aurora_m", title: "M", sku: "AUR-M", size: "M", price: 42900, inventory_quantity: 2, returnRate: 0.34, defectRate: 0.03 },
-      { id: "var_aurora_g", title: "G", sku: "AUR-G", size: "G", price: 42900, inventory_quantity: 8, returnRate: 0.16, defectRate: 0.03 },
-      { id: "var_aurora_gg", title: "GG", sku: "AUR-GG", size: "GG", price: 42900, inventory_quantity: 4, returnRate: 0.18, defectRate: 0.03 },
+      { id: "var_aurora_p", title: "P", sku: "AUR-P", size: "P", price: 64900, inventory_quantity: 6, returnRate: 0.17, defectRate: 0.03 },
+      { id: "var_aurora_m", title: "M", sku: "AUR-M", size: "M", price: 64900, inventory_quantity: 2, returnRate: 0.34, defectRate: 0.03 },
+      { id: "var_aurora_g", title: "G", sku: "AUR-G", size: "G", price: 64900, inventory_quantity: 8, returnRate: 0.16, defectRate: 0.03 },
+      { id: "var_aurora_gg", title: "GG", sku: "AUR-GG", size: "GG", price: 64900, inventory_quantity: 4, returnRate: 0.18, defectRate: 0.03 },
     ],
   },
   {
@@ -37,10 +37,10 @@ export const products: Product[] = [
     accent: "#9eb8b3",
     imageKey: "sereno",
     variants: [
-      { id: "var_sereno_p", title: "P", sku: "SER-P", size: "P", price: 38900, inventory_quantity: 7, returnRate: 0.13, defectRate: 0.02 },
-      { id: "var_sereno_m", title: "M", sku: "SER-M", size: "M", price: 38900, inventory_quantity: 9, returnRate: 0.14, defectRate: 0.02 },
-      { id: "var_sereno_g", title: "G", sku: "SER-G", size: "G", price: 38900, inventory_quantity: 5, returnRate: 0.14, defectRate: 0.02 },
-      { id: "var_sereno_gg", title: "GG", sku: "SER-GG", size: "GG", price: 38900, inventory_quantity: 3, returnRate: 0.16, defectRate: 0.02 },
+      { id: "var_sereno_p", title: "P", sku: "SER-P", size: "P", price: 57900, inventory_quantity: 7, returnRate: 0.13, defectRate: 0.02 },
+      { id: "var_sereno_m", title: "M", sku: "SER-M", size: "M", price: 57900, inventory_quantity: 9, returnRate: 0.14, defectRate: 0.02 },
+      { id: "var_sereno_g", title: "G", sku: "SER-G", size: "G", price: 57900, inventory_quantity: 5, returnRate: 0.14, defectRate: 0.02 },
+      { id: "var_sereno_gg", title: "GG", sku: "SER-GG", size: "GG", price: 57900, inventory_quantity: 3, returnRate: 0.16, defectRate: 0.02 },
     ],
   },
   {
@@ -55,10 +55,10 @@ export const products: Product[] = [
     badge: "Nova coleção",
     imageKey: "trama",
     variants: [
-      { id: "var_trama_p", title: "P", sku: "TRA-P", size: "P", price: 21900, inventory_quantity: 8, returnRate: 0.12, defectRate: 0.04 },
-      { id: "var_trama_m", title: "M", sku: "TRA-M", size: "M", price: 21900, inventory_quantity: 11, returnRate: 0.13, defectRate: 0.04 },
-      { id: "var_trama_g", title: "G", sku: "TRA-G", size: "G", price: 21900, inventory_quantity: 6, returnRate: 0.13, defectRate: 0.04 },
-      { id: "var_trama_gg", title: "GG", sku: "TRA-GG", size: "GG", price: 21900, inventory_quantity: 2, returnRate: 0.15, defectRate: 0.04 },
+      { id: "var_trama_p", title: "P", sku: "TRA-P", size: "P", price: 28900, inventory_quantity: 8, returnRate: 0.12, defectRate: 0.04 },
+      { id: "var_trama_m", title: "M", sku: "TRA-M", size: "M", price: 28900, inventory_quantity: 11, returnRate: 0.13, defectRate: 0.04 },
+      { id: "var_trama_g", title: "G", sku: "TRA-G", size: "G", price: 28900, inventory_quantity: 6, returnRate: 0.13, defectRate: 0.04 },
+      { id: "var_trama_gg", title: "GG", sku: "TRA-GG", size: "GG", price: 28900, inventory_quantity: 2, returnRate: 0.15, defectRate: 0.04 },
     ],
   },
   {
@@ -72,10 +72,10 @@ export const products: Product[] = [
     accent: "#c6c4a1",
     imageKey: "eixo",
     variants: [
-      { id: "var_eixo_p", title: "P", sku: "EIX-P", size: "P", price: 32900, inventory_quantity: 5, returnRate: 0.16, defectRate: 0.03 },
-      { id: "var_eixo_m", title: "M", sku: "EIX-M", size: "M", price: 32900, inventory_quantity: 7, returnRate: 0.18, defectRate: 0.03 },
-      { id: "var_eixo_g", title: "G", sku: "EIX-G", size: "G", price: 32900, inventory_quantity: 8, returnRate: 0.17, defectRate: 0.03 },
-      { id: "var_eixo_gg", title: "GG", sku: "EIX-GG", size: "GG", price: 32900, inventory_quantity: 4, returnRate: 0.18, defectRate: 0.03 },
+      { id: "var_eixo_p", title: "P", sku: "EIX-P", size: "P", price: 44900, inventory_quantity: 5, returnRate: 0.16, defectRate: 0.03 },
+      { id: "var_eixo_m", title: "M", sku: "EIX-M", size: "M", price: 44900, inventory_quantity: 7, returnRate: 0.18, defectRate: 0.03 },
+      { id: "var_eixo_g", title: "G", sku: "EIX-G", size: "G", price: 44900, inventory_quantity: 8, returnRate: 0.17, defectRate: 0.03 },
+      { id: "var_eixo_gg", title: "GG", sku: "EIX-GG", size: "GG", price: 44900, inventory_quantity: 4, returnRate: 0.18, defectRate: 0.03 },
     ],
   },
   {
@@ -90,10 +90,10 @@ export const products: Product[] = [
     alternativeProductId: "prod_orbita",
     imageKey: "lume",
     variants: [
-      { id: "var_lume_p", title: "P", sku: "LUM-P", size: "P", price: 45900, inventory_quantity: 4, returnRate: 0.18, defectRate: 0.11 },
-      { id: "var_lume_m", title: "M", sku: "LUM-M", size: "M", price: 45900, inventory_quantity: 3, returnRate: 0.19, defectRate: 0.12 },
-      { id: "var_lume_g", title: "G", sku: "LUM-G", size: "G", price: 45900, inventory_quantity: 5, returnRate: 0.18, defectRate: 0.11 },
-      { id: "var_lume_gg", title: "GG", sku: "LUM-GG", size: "GG", price: 45900, inventory_quantity: 2, returnRate: 0.2, defectRate: 0.12 },
+      { id: "var_lume_p", title: "P", sku: "LUM-P", size: "P", price: 62900, inventory_quantity: 4, returnRate: 0.18, defectRate: 0.11 },
+      { id: "var_lume_m", title: "M", sku: "LUM-M", size: "M", price: 62900, inventory_quantity: 3, returnRate: 0.19, defectRate: 0.12 },
+      { id: "var_lume_g", title: "G", sku: "LUM-G", size: "G", price: 62900, inventory_quantity: 5, returnRate: 0.18, defectRate: 0.11 },
+      { id: "var_lume_gg", title: "GG", sku: "LUM-GG", size: "GG", price: 62900, inventory_quantity: 2, returnRate: 0.2, defectRate: 0.12 },
     ],
   },
   {
@@ -107,10 +107,10 @@ export const products: Product[] = [
     accent: "#c89a9b",
     imageKey: "orbita",
     variants: [
-      { id: "var_orbita_p", title: "P", sku: "ORB-P", size: "P", price: 49900, inventory_quantity: 6, returnRate: 0.12, defectRate: 0.02 },
-      { id: "var_orbita_m", title: "M", sku: "ORB-M", size: "M", price: 49900, inventory_quantity: 8, returnRate: 0.13, defectRate: 0.02 },
-      { id: "var_orbita_g", title: "G", sku: "ORB-G", size: "G", price: 49900, inventory_quantity: 7, returnRate: 0.14, defectRate: 0.02 },
-      { id: "var_orbita_gg", title: "GG", sku: "ORB-GG", size: "GG", price: 49900, inventory_quantity: 4, returnRate: 0.15, defectRate: 0.02 },
+      { id: "var_orbita_p", title: "P", sku: "ORB-P", size: "P", price: 74900, inventory_quantity: 6, returnRate: 0.12, defectRate: 0.02 },
+      { id: "var_orbita_m", title: "M", sku: "ORB-M", size: "M", price: 74900, inventory_quantity: 8, returnRate: 0.13, defectRate: 0.02 },
+      { id: "var_orbita_g", title: "G", sku: "ORB-G", size: "G", price: 74900, inventory_quantity: 7, returnRate: 0.14, defectRate: 0.02 },
+      { id: "var_orbita_gg", title: "GG", sku: "ORB-GG", size: "GG", price: 74900, inventory_quantity: 4, returnRate: 0.15, defectRate: 0.02 },
     ],
   },
   {
@@ -129,9 +129,9 @@ export const products: Product[] = [
     imageKey: "bruma",
     alternativeProductId: "prod_luz",
     variants: [
-      { id: "var_bruma_pessego", title: "Pêssego", sku: "BRU-PES", size: null, price: 8900, inventory_quantity: 18, returnRate: 0, defectRate: 0 },
-      { id: "var_bruma_rosa", title: "Rosa queimado", sku: "BRU-ROS", size: null, price: 8900, inventory_quantity: 16, returnRate: 0, defectRate: 0 },
-      { id: "var_bruma_terracota", title: "Terracota", sku: "BRU-TER", size: null, price: 8900, inventory_quantity: 12, returnRate: 0, defectRate: 0 },
+      { id: "var_bruma_pessego", title: "Pêssego", sku: "BRU-PES", size: null, price: 12900, inventory_quantity: 18, returnRate: 0, defectRate: 0 },
+      { id: "var_bruma_rosa", title: "Rosa queimado", sku: "BRU-ROS", size: null, price: 12900, inventory_quantity: 16, returnRate: 0, defectRate: 0 },
+      { id: "var_bruma_terracota", title: "Terracota", sku: "BRU-TER", size: null, price: 12900, inventory_quantity: 12, returnRate: 0, defectRate: 0 },
     ],
   },
   {
@@ -149,8 +149,8 @@ export const products: Product[] = [
     imageKey: "luz",
     alternativeProductId: "prod_bruma",
     variants: [
-      { id: "var_luz_nude", title: "Nude rosado", sku: "LUZ-NUD", size: null, price: 6900, inventory_quantity: 20, returnRate: 0, defectRate: 0 },
-      { id: "var_luz_cereja", title: "Cereja", sku: "LUZ-CER", size: null, price: 6900, inventory_quantity: 14, returnRate: 0, defectRate: 0 },
+      { id: "var_luz_nude", title: "Nude rosado", sku: "LUZ-NUD", size: null, price: 8900, inventory_quantity: 20, returnRate: 0, defectRate: 0 },
+      { id: "var_luz_cereja", title: "Cereja", sku: "LUZ-CER", size: null, price: 8900, inventory_quantity: 14, returnRate: 0, defectRate: 0 },
     ],
   },
 ];

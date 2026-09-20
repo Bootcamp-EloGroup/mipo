@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { products } from "../src/data/products";
 import { evaluateCheckout } from "../src/services/mipo";
-import { evaluateMeasurementFit, measurementAssessmentSummary, requiredMeasurements } from "../src/services/measurement-fit";
+import { evaluateMeasurementFit, measurementAssessmentSummary, measurementFieldError, requiredMeasurements } from "../src/services/measurement-fit";
 
 describe("measurement fit", () => {
   it("usa busto, cintura e quadril para vestidos", () => {
@@ -32,6 +32,19 @@ describe("measurement fit", () => {
     expect(result.recommendedSize).toBeUndefined();
   });
 
+  it("orienta a correção de valores corporais improváveis", () => {
+    expect(measurementFieldError("waist", 46)).toMatch(/50 e 150 cm/);
+    expect(measurementFieldError("hip", 70)).toMatch(/75 e 180 cm/);
+    expect(measurementFieldError("bust", 92)).toBeUndefined();
+  });
+
+  it("identifica quais referências estão fora da grade", () => {
+    const result = evaluateMeasurementFit(products[0], { bust: 70, waist: 64, hip: 92 });
+    expect(result.status).toBe("out_of_range");
+    expect(result.evidence).toMatch(/busto abaixo da referência 82–110 cm/i);
+    expect(result.evidence).toMatch(/Confira como medir/i);
+  });
+
   it("integra a recomendação no resultado determinístico", () => {
     const product = products[0];
     const result = evaluateCheckout(product, product.variants[0], { measurements: { bust: 92, waist: 74, hip: 102 } });
@@ -46,5 +59,13 @@ describe("measurement fit", () => {
     expect(persisted).not.toContain("92");
     expect(persisted).not.toContain("74");
     expect(persisted).not.toContain("102");
+  });
+});
+
+describe("catalog pricing", () => {
+  it("usa preços editoriais realistas em reais e centavos", () => {
+    expect(products.find((product) => product.id === "prod_aurora")?.variants[0].price).toBe(64900);
+    expect(products.find((product) => product.id === "prod_eixo")?.variants[0].price).toBe(44900);
+    expect(products.find((product) => product.id === "prod_bruma")?.variants[0].price).toBe(12900);
   });
 });
