@@ -1,0 +1,8 @@
+.wismo-badge{display:inline-block;padding:5px 9px;border-radius:999px;background:var(--surface-strong);font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
+.wismo-badge--on_time{background:#dceca6}
+.wismo-badge--delayed{background:#e6dfac}
+.wismo-badge--no_update{background:#f0c7b8}
+.wismo-badge--delivered{background:#dce5d8}
+.wismo-badge--inconclusive{background:#dedbd2}
+.wismo-badge--escalated{background:#f0c7b8}
+
