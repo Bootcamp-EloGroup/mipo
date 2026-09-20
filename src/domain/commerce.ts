@@ -11,6 +11,16 @@ export type ProductDecisionProfile = {
   acceptedPreferences: string[];
   attributes: string[];
 };
+export type TextileProfile = {
+  material: string;
+  composition?: string;
+  elasticity: "none" | "low" | "medium" | "high" | "unknown";
+  structure: "fluid" | "balanced" | "structured" | "unknown";
+  drape?: string;
+  care: string[];
+  origin: "provided" | "derived" | "synthetic";
+  evidence: string[];
+};
 export type SelectionContext = {
   preference: string;
   label: string;
@@ -42,6 +52,7 @@ export type Product = Pick<
   productKind?: "apparel" | "beauty" | "accessory" | "lifestyle";
   variantAttribute?: "size" | "shade" | "color" | "volume" | "none";
   decisionProfile?: ProductDecisionProfile;
+  textileProfile?: TextileProfile;
   variants: ProductVariant[];
   alternativeProductId?: string;
 };
@@ -54,7 +65,7 @@ export type CartLine = Pick<HttpTypes.StoreCartLineItem, "id" | "title" | "quant
   size: Size | string | null;
   unitPrice: number;
   color: string;
-  mipoDecision?: "accepted" | "kept_original";
+  mipoDecision?: "accepted" | "kept_original" | "not_required" | "pending";
   selectionContext?: SelectionContext;
 };
 

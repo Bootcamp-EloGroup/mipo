@@ -3,7 +3,6 @@ import { getOrCreateSessionId } from "@/src/lib/session";
 import { dataSource, supabaseRest } from "@/src/lib/supabase-rest";
 import { getProduct } from "@/src/server/store";
 import { runPythonAgent } from "@/src/server/mipo-python-agent";
-import { explainFitDecision } from "@/src/server/mipo-ai";
 import { evaluateCheckoutRisk, evaluateSelectionContext, type FitPreference, type RiskResult } from "@/src/services/mipo";
 import type { SelectionContext, Size } from "@/src/domain/commerce";
 import type { AgentAnswer } from "@/src/domain/agent";
@@ -73,15 +72,13 @@ export async function POST(request: Request) {
         ? evaluateSelectionContext(product, selected, selectionContext)
         : evaluateCheckoutRisk(product, selected, fitPreference, undefined, usualSize);
 
-      const explanation = await explainFitDecision(product, selected, fitPreference, result, usualSize);
-
       const answer: AgentAnswer = {
         action: "explain_evidence",
-        message: explanation.message,
+        message: result.message,
         rationaleCode: rationaleByRisk[result.risk],
-        provider: explanation.provider,
-        model: explanation.model,
-        status: explanation.provider === "eloagents" ? "eloagents_succeeded" : "deterministic_fallback",
+        provider: "deterministic",
+        model: "deterministic_engine",
+        status: "deterministic_fallback",
       };
 
       return Response.json({ enabled: true, answer });
@@ -140,34 +137,16 @@ export async function POST(request: Request) {
 
     let answer: AgentAnswer;
     try {
-      answer = await runPythonAgent(context);
+      answer = await runPythonAgent(context, { richExplanation: false });
     } catch {
-      try {
-        const explanation = await explainFitDecision(
-          product,
-          selected,
-          intervention.fit_preference ?? "regular",
-          result,
-          intervention.evidence.usualSize
-        );
-        answer = {
-          action: "explain_evidence",
-          message: explanation.message,
-          rationaleCode: rationaleByRisk[result.risk],
-          provider: explanation.provider,
-          model: explanation.model,
-          status: explanation.provider === "eloagents" ? "eloagents_succeeded" : "deterministic_fallback",
-        };
-      } catch {
-        answer = {
-          action: "explain_evidence",
-          message: result.message,
-          rationaleCode: rationaleByRisk[result.risk],
-          provider: "deterministic",
-          model: "python_unavailable",
-          status: "deterministic_fallback",
-        };
-      }
+      answer = {
+        action: "explain_evidence",
+        message: result.message,
+        rationaleCode: rationaleByRisk[result.risk],
+        provider: "deterministic",
+        model: "python_unavailable",
+        status: "deterministic_fallback",
+      };
     }
 
     return Response.json({ enabled: true, answer });

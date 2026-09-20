@@ -23,12 +23,15 @@ export function normalizeDashboardData(payload: Wire): ManagerDashboardData {
   const w = (payload.historicalWindow ?? {}) as Wire;
   const o = (payload.options ?? {}) as Wire;
   const marketing = (payload.marketing ?? {}) as Wire;
+  const pilot = (payload.pilot ?? {}) as Wire;
+  const normalizePilotGroup = (value: unknown) => { const group=(value ?? {}) as Wire; const observed=num(group.observed); const returned=num(group.returns); return {orders:num(group.orders),observed,returns:returned,returnRate:observed ? returned/observed : null,returnCostCents:num(group.returnCostCents ?? group.return_cost_cents)}; };
   return {
     generatedAt: String(payload.generatedAt ?? fallback.generatedAt),
     filters: { from: f.from ? String(f.from) : null, to: f.to ? String(f.to) : null, channel: f.channel ? String(f.channel) : null, category: f.category ? String(f.category) : null, origin: f.origin === "demo" || f.origin === "historical" ? f.origin : "all" },
     historicalWindow: { from: w.from ? String(w.from) : null, to: w.to ? String(w.to) : null },
     options: { channels: rows(o.channels, (r) => ({ value: String(r.value) })), categories: rows(o.categories, (r) => ({ value: String(r.value) })) },
     scenarioBasis: fallback.scenarioBasis,
+    pilot:{control:normalizePilotGroup(pilot.control),treatment:normalizePilotGroup(pilot.treatment),readyForComparison:pilot.readyForComparison===true || pilot.ready_for_comparison===true},
     marketing: {
       source: "historical", campaigns: num(marketing.campaigns), spendCents: num(marketing.spendCents ?? marketing.spend_cents), impressions: num(marketing.impressions), clicks: num(marketing.clicks), conversions: num(marketing.conversions), revenueCents: num(marketing.revenueCents ?? marketing.revenue_cents),
       byChannel: rows(marketing.byChannel, (r) => ({ label: String(r.channel ?? r.label), campaigns: num(r.campaigns), spendCents: num(r.spend_cents), conversions: num(r.conversions), revenueCents: num(r.revenue_cents), impressions: num(r.impressions), clicks: num(r.clicks) })),
@@ -59,13 +62,15 @@ export function normalizeDashboardData(payload: Wire): ManagerDashboardData {
 
 export async function getManagerDashboardData(filters: DashboardFilters): Promise<ManagerDashboardData> {
   if (dataSource() !== "supabase") return { ...emptyManagerDashboard(), filters };
-  const [payload, inventory, marketing] = await Promise.all([
+  const [payload, inventory, marketing, pilot] = await Promise.all([
     supabaseRest<Wire>("rpc/get_manager_dashboard", { method: "POST", body: JSON.stringify({ p_from: filters.from, p_to: filters.to, p_channel: filters.channel, p_category: filters.category, p_origin: filters.origin }) }),
     supabaseRest<Wire>("rpc/get_manager_inventory_kpis", { method: "POST", body: JSON.stringify({ p_category: filters.category }) }),
     supabaseRest<Wire>("rpc/get_manager_marketing_kpis", { method: "POST", body: JSON.stringify({ p_category: filters.category }) }),
+    supabaseRest<Wire>("rpc/get_manager_pilot_kpis", { method: "POST", body: "{}" }),
   ]);
   const normalized = normalizeDashboardData(payload ?? {});
   normalized.marketing = normalizeDashboardData({ marketing }).marketing;
+  normalized.pilot = normalizeDashboardData({ pilot }).pilot;
   normalized.executive.criticalSkus = num(inventory.criticalSkus ?? inventory.critical_skus);
   normalized.executive.inventoryExposureCents = num(inventory.inventoryExposureCents ?? inventory.inventory_exposure_cents);
   normalized.scenarioBasis = {

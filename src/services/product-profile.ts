@@ -1,6 +1,24 @@
-import type { Product, ProductDecisionProfile } from "@/src/domain/commerce";
+import type { Product, ProductDecisionProfile, TextileProfile } from "@/src/domain/commerce";
 
 const profile = (questions: ProductDecisionProfile["questions"], acceptedPreferences: string[], attributes: string[]): ProductDecisionProfile => ({ questions, acceptedPreferences, attributes });
+
+const textile = (value: Omit<TextileProfile, "origin" | "evidence">): TextileProfile => ({
+  ...value,
+  origin: "synthetic",
+  evidence: ["Perfil editorial Vértice; validar composição no cadastro do produto antes de uso comercial."],
+});
+
+export function getTextileProfile(product: Product): TextileProfile | undefined {
+  if (product.textileProfile) return product.textileProfile;
+  const text = `${product.title} ${product.subtitle ?? ""} ${product.description ?? ""}`.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  if (text.includes("aurora") || text.includes("linho")) return textile({ material: "Linho", composition: "100% linho pré-encolhido", elasticity: "none", structure: "structured", drape: "respirável, com forma definida e pouca cedência", care: ["Lavar em ciclo delicado e secar à sombra."] });
+  if (text.includes("sereno")) return textile({ material: "Algodão", composition: "100% algodão penteado", elasticity: "low", structure: "structured", drape: "reto e encorpado", care: ["Lavar em ciclo delicado e passar em temperatura média."] });
+  if (text.includes("trama") || text.includes("tricot") || text.includes("trico")) return textile({ material: "Tricô de algodão", composition: "Fio de algodão", elasticity: "medium", structure: "fluid", drape: "maleável e respirável", care: ["Lavar à mão e secar na horizontal."] });
+  if (text.includes("eixo")) return textile({ material: "Viscose com lã fria", composition: "Mistura de viscose e lã fria", elasticity: "low", structure: "balanced", drape: "alfaiataria fluida com queda ampla", care: ["Preferir lavagem profissional ou ciclo delicado conforme etiqueta."] });
+  if (text.includes("lume") || text.includes("sarja")) return textile({ material: "Sarja de algodão", composition: "Algodão de gramatura alta", elasticity: "low", structure: "structured", drape: "firme e utilitário", care: ["Passar pelo avesso em temperatura média."] });
+  if (text.includes("orbita") || text.includes("la natural")) return textile({ material: "Tricô de lã e algodão", composition: "Mistura de lã natural e algodão", elasticity: "medium", structure: "balanced", drape: "envolvente e naturalmente amplo", care: ["Lavar à mão e secar na horizontal."] });
+  return undefined;
+}
 
 export function getProductDecisionProfile(product: Product): ProductDecisionProfile {
   if (product.decisionProfile) return product.decisionProfile;

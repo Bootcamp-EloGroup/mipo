@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { apiError } from "@/src/lib/api-response";
-import { auditCart } from "@/src/server/mipo-ai";
+import { auditCart } from "@/src/server/mipo-assistant";
 import type { CartLine } from "@/src/domain/commerce";
 
 export async function POST(request: Request) {

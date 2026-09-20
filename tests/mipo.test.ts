@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { products } from "../src/data/products";
 import { evaluateCheckoutRisk, evaluateSelectionContext } from "../src/services/mipo";
-import { productQuestions } from "../src/services/product-profile";
+import { getTextileProfile, productQuestions } from "../src/services/product-profile";
 
 describe("evaluateCheckoutRisk", () => {
   it("recomenda variante com taxa pelo menos 8 p.p. menor", () => {
@@ -90,5 +90,18 @@ describe("evaluateCheckoutRisk", () => {
     });
     expect(productQuestions(product)[0].options).toEqual(["Couro"]);
     expect(result.risk).toBe("preference_mismatch");
+  });
+
+  it("expõe composição e elasticidade com origem rastreável", () => {
+    const profile = getTextileProfile({ ...products[0], title: "Vestido Aurora de Linho" });
+    expect(profile?.material).toBe("Linho");
+    expect(profile?.elasticity).toBe("none");
+    expect(profile?.origin).toBe("synthetic");
+    expect(profile?.evidence[0]).toMatch(/editorial/i);
+  });
+
+  it("não inventa perfil têxtil quando o catálogo não identifica o material", () => {
+    const profile = getTextileProfile({ ...products[0], title: "Vestido Essencial", subtitle: null, description: null });
+    expect(profile).toBeUndefined();
   });
 });

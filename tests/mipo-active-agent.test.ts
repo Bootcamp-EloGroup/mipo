@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chatWithMipo, auditCart, explainFitDecision } from "../src/server/mipo-ai";
+import { auditCart, chatWithMipo } from "../src/server/mipo-assistant";
 import { products } from "../src/data/products";
 import { evaluateCheckoutRisk } from "../src/services/mipo";
 import type { CartLine } from "../src/domain/commerce";
@@ -36,7 +36,7 @@ describe("MIPO Active Agent Suite", () => {
       expect(audit.careTips).toHaveLength(0);
     });
 
-    it("aprova sacola com tamanhos uniformes e gera dicas de cuidados", async () => {
+    it("aprova sacola com tamanhos uniformes sem inventar cuidados no fallback", async () => {
       const items: CartLine[] = [
         {
           id: "1",
@@ -62,13 +62,11 @@ describe("MIPO Active Agent Suite", () => {
 
       const audit = await auditCart(items);
       expect(audit.status).toBe("aligned");
-      expect(audit.advice).toContain("tamanho M");
-      expect(audit.careTips.length).toBeGreaterThanOrEqual(2);
-      expect(audit.careTips.some((tip) => /linho/i.test(tip))).toBe(true);
-      expect(audit.careTips.some((tip) => /tricot/i.test(tip))).toBe(true);
+      expect(audit.advice).toContain("própria escolha");
+      expect(audit.careTips).toHaveLength(0);
     });
 
-    it("alerta quando há disparidade de tamanhos entre peças de vestuário", async () => {
+    it("não compara tamanhos de produtos distintos e alerta apenas decisão pendente", async () => {
       const items: CartLine[] = [
         {
           id: "1",
@@ -79,6 +77,7 @@ describe("MIPO Active Agent Suite", () => {
           quantity: 1,
           unitPrice: 32900,
           color: "#dfdacb",
+          mipoDecision: "pending",
         },
         {
           id: "2",
@@ -94,22 +93,8 @@ describe("MIPO Active Agent Suite", () => {
 
       const audit = await auditCart(items);
       expect(audit.status).toBe("attention");
-      expect(audit.headline).toContain("variação de tamanhos");
-      expect(audit.advice).toContain("P e GG");
-    });
-  });
-
-  describe("explainFitDecision (Explicação Contextual)", () => {
-    it("fornece explicação contextualizada para a decisão de caimento", async () => {
-      const product = products[0];
-      const selected = product.variants[0];
-      const risk = evaluateCheckoutRisk(product, selected);
-      const explanation = await explainFitDecision(product, selected, "regular", risk, "M");
-
-      expect(explanation).toBeDefined();
-      expect(typeof explanation.message).toBe("string");
-      expect(explanation.message.length).toBeGreaterThan(10);
-      expect(["eloagents", "deterministic"]).toContain(explanation.provider);
+      expect(audit.headline).toContain("decisão assistida pendente");
+      expect(audit.advice).not.toContain("P e GG");
     });
   });
 

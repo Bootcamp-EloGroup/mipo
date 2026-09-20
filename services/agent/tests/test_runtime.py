@@ -65,3 +65,4 @@ def test_audit_failure_does_not_break_the_customer_experience(monkeypatch,caplog
 
     assert response.status_code == 200
     assert "audit_failed" in caplog.text
+    assert response.headers["X-MIPO-Audit-Status"] == "audit_failed"

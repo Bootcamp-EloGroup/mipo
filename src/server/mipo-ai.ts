@@ -15,7 +15,7 @@ Catálogo Vértice (Edição 06 - Atelier Cotidiano):
 `;
 
 export type ChatMessage = {
-  role: "system" | "user" | "assistant";
+  role: "user" | "assistant";
   content: string;
 };
 
@@ -69,6 +69,8 @@ async function callEloAgentsLlm(messages: ChatMessage[], temperature = 0.4): Pro
   }
 }
 
+import { chatWithPythonAgent, auditCartWithPythonAgent } from "@/src/server/mipo-python-agent";
+
 /**
  * Conversational Assistant for Vértice Atelier.
  * Provides fit guidance, styling recommendations, fabric care tips, and answers questions.
@@ -78,6 +80,13 @@ export async function chatWithMipo(
   productContext?: Product | null,
   cartContext?: CartLine[] | null
 ): Promise<ChatResponse> {
+  if (process.env.MIPO_PYTHON_AGENT_URL) {
+    try {
+      return await chatWithPythonAgent(messages, productContext, cartContext);
+    } catch {
+      // Fallback to internal atelier reasoning if python agent is offline
+    }
+  }
   const contextBlock = `[CONTEXTO & DIRETRIZES DO ATELIER VÉRTICE:
 Você é a "MIPO Concierge", a consultora oficial de estilo, caimento e curadoria do atelier autoral Vértice.
 Seu papel é orientar clientes com precisão, sofisticação e cordialidade sobre caimento, tecidos nobres, combinações e cuidados.
@@ -251,6 +260,13 @@ export async function auditCart(items: CartLine[]): Promise<{
   advice: string;
   careTips: string[];
 }> {
+  if (process.env.MIPO_PYTHON_AGENT_URL) {
+    try {
+      return await auditCartWithPythonAgent(items);
+    } catch {
+      // Fallback to local audit logic if python agent is offline
+    }
+  }
   if (!items || items.length === 0) {
     return {
       status: "aligned",

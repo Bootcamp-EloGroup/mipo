@@ -2,6 +2,17 @@
 
 Esta pasta reúne as análises que fundamentaram o **MIPO (Motor Inteligente de Priorização Operacional)**.
 
+## Escopo executável atual
+
+O produto executável está concentrado na jornada **pré-compra**: avaliação
+determinística de produto/tamanho, explicação controlada, decisão do cliente,
+auditoria e painel. O concierge de moda e a auditoria de sacola são capacidades
+experimentais de demonstração e não substituem o núcleo determinístico.
+
+O fluxo pós-compra **WISMO permanece no backlog**. Os números históricos de
+atendimento sustentam sua prioridade futura, mas a aplicação ainda não consulta
+pedido/tracking, não responde prazo e não registra resolução ou escalonamento WISMO.
+
 ## Ordem de leitura
 
 1. [`analises/01_exploracao_inicial.ipynb`](analises/01_exploracao_inicial.ipynb) — exploração inicial das frentes de vendas, margem, devoluções, atendimento, estoque e clientes.

@@ -3,13 +3,16 @@ import { products as localProducts, region } from "@/src/data/products";
 import type { Cart, Product, SelectionContext } from "@/src/domain/commerce";
 import { dataSource, supabaseRest } from "@/src/lib/supabase-rest";
 import { expiresAt } from "@/src/lib/session";
+import { getTextileProfile } from "@/src/services/product-profile";
 
 type DbCart = { id: string; currency_code: string };
-type DbCartItem = { id: string; quantity: number; unit_price_cents: number; mipo_decision?: "accepted" | "kept_original"; selection_context?: SelectionContext | null; product_variants: { id: string; size: "P"|"M"|"G"|"GG"|null; title: string; products: { id: string; title: string; color: string } } };
+type DbCartItem = { id: string; quantity: number; unit_price_cents: number; mipo_decision?: "accepted" | "kept_original" | "not_required"; selection_context?: SelectionContext | null; product_variants: { id: string; size: "P"|"M"|"G"|"GG"|null; title: string; products: { id: string; title: string; color: string } } };
 
 export async function listProducts(): Promise<Product[]> {
-  if (dataSource() === "local") return localProducts;
-  return supabaseRest<Product[]>("rpc/get_storefront_products", { method: "POST", body: "{}" });
+  const catalog = dataSource() === "local"
+    ? localProducts
+    : await supabaseRest<Product[]>("rpc/get_storefront_products", { method: "POST", body: "{}" });
+  return catalog.map((product) => ({ ...product, textileProfile: getTextileProfile(product) }));
 }
 
 export async function getProduct(id: string) { return (await listProducts()).find((product) => product.id === id); }
@@ -31,7 +34,7 @@ export async function getCart(sessionId: string): Promise<Cart> {
   return { id: cart.id, region: { ...region, currency_code: cart.currency_code }, items: rows.map((row) => ({ id: row.id, productId: row.product_variants.products.id, variantId: row.product_variants.id, title: row.product_variants.products.title, size: row.product_variants.size, quantity: row.quantity, unitPrice: row.unit_price_cents, color: row.product_variants.products.color, mipoDecision: row.mipo_decision, selectionContext: row.selection_context ?? undefined })) };
 }
 
-export async function addCartItem(sessionId: string, variantId: string, quantity: number, mipoDecision?: "accepted"|"kept_original", selectionContext?: SelectionContext) {
+export async function addCartItem(sessionId: string, variantId: string, quantity: number, mipoDecision?: "accepted"|"kept_original"|"not_required", selectionContext?: SelectionContext) {
   const cart = await ensureCart(sessionId); const product = (await listProducts()).find((item) => item.variants.some((variant) => variant.id === variantId)); const variant = product?.variants.find((item) => item.id === variantId);
   if (!product || !variant) throw new Error("Variação não encontrada.");
   if (dataSource() === "local") return { id: cart.id, region, items: [{ id: crypto.randomUUID(), productId: product.id, variantId, title: product.title, size: variant.size, quantity, unitPrice: variant.price, color: product.color, mipoDecision, selectionContext }] } satisfies Cart;

@@ -1,0 +1,3 @@
+display_id,outcome,return_reason,return_cost_reais,observed_at
+MIPO-ABC123,kept,,0,2026-09-20T12:00:00-03:00
+MIPO-DEF456,returned,caimento,45.90,2026-09-20T13:00:00-03:00

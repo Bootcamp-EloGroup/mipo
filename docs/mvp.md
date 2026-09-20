@@ -1,5 +1,10 @@
 # Relatorio do MVP - MIPO
 
+> **Status de escopo — setembro de 2026:** a entrega executável atual cobre a
+> jornada pré-compra. O fluxo pós-compra WISMO foi deliberadamente movido para
+> o backlog e não deve ser apresentado como funcionalidade implementada. As
+> seções WISMO abaixo descrevem o incremento futuro originalmente planejado.
+
 ## 1. Resumo executivo
 
 O MVP do **MIPO (Motor Inteligente de Priorizacao Operacional)** tem como objetivo demonstrar que a solucao nao apenas analisa dados historicos, mas **intervem na jornada do cliente antes que problemas virem devolucao, ticket, retrabalho ou perda de margem**.
@@ -65,13 +70,12 @@ Em termos praticos, o MVP precisa demonstrar que:
 
 - Prototipo navegavel do checkout inteligente.
 - Recomendacao de tamanho, produto similar ou alerta de disponibilidade.
-- Chatbot de e-commerce focado em WISMO.
-- Consulta simulada ou consolidada de status de pedido.
 - Registro de intervencoes no checkout.
-- Registro de atendimentos resolvidos ou escalados pelo chatbot.
 - Painel do gestor.
 - Simulador de impacto estimado.
 - Diagramas e arquitetura do fluxo ponta a ponta.
+- Concierge de moda e auditoria de sacola como capacidades experimentais,
+  separadas do núcleo determinístico do MIPO.
 
 ### Fora do MVP
 
@@ -79,6 +83,8 @@ Em termos praticos, o MVP precisa demonstrar que:
 - Compra automatica ou reposicao automatica.
 - Logistica real em tempo real.
 - Chatbot generico para todos os assuntos.
+- Consulta e atendimento WISMO; permanece no backlog.
+- Integracao com tracking, prazo de pedido e escalonamento pos-compra.
 - Previsao avancada de demanda.
 - Garantia de economia real capturada.
 - IA tomando decisoes criticas sem regras ou validacao humana.

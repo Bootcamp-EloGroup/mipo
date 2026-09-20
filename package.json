@@ -11,6 +11,7 @@
     "data:import": "node scripts/import-case-data.mjs",
     "data:import-management": "node scripts/import-management-data.mjs",
     "data:import-marketing": "node scripts/import-marketing-data.mjs",
+    "data:import-pilot-outcomes": "node scripts/import-pilot-outcomes.mjs",
     "data:seed-dashboard": "node scripts/seed-dashboard-demo.mjs",
     "data:reset-demo": "node scripts/reset-demo-data.mjs",
     "supabase:push": "npx supabase db push",

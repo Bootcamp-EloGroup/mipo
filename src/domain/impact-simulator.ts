@@ -77,3 +77,97 @@ export function simulateImpact(input: ImpactSimulationInput): ImpactSimulationRe
     status: "scenario",
   };
 }
+
+export type ExperimentProjectionInput = {
+  totalEligibleSessions: number;
+  splitRatio?: number;
+  observedControlReturnRate: number;
+  mipoAcceptanceRate: number;
+  avoidableReturnShare: number;
+  averageReturnCostCents: number;
+  averageMarginPerOrderCents?: number;
+};
+
+export type ExperimentProjectionResult = {
+  control: {
+    sessions: number;
+    returns: number;
+    returnRate: number;
+    reverseLogisticsCostCents: number;
+  };
+  mipo: {
+    sessions: number;
+    returns: number;
+    returnRate: number;
+    reverseLogisticsCostCents: number;
+  };
+  delta: {
+    avoidedReturns: number;
+    relativeReductionRate: number;
+    potentialReturnCostAvoidedCents: number;
+  };
+  assumptions: string[];
+  status: "scenario_projection";
+};
+
+/**
+ * Projeta um desenho de experimento antes da coleta. Todos os resultados do
+ * tratamento são derivados de premissas e não representam observações,
+ * causalidade, significância estatística ou economia capturada.
+ */
+export function projectExperimentScenario(input: ExperimentProjectionInput): ExperimentProjectionResult {
+  assertNonNegative("totalEligibleSessions", input.totalEligibleSessions);
+  assertRate("observedControlReturnRate", input.observedControlReturnRate);
+  assertRate("mipoAcceptanceRate", input.mipoAcceptanceRate);
+  assertRate("avoidableReturnShare", input.avoidableReturnShare);
+  assertNonNegative("averageReturnCostCents", input.averageReturnCostCents);
+
+  const split = input.splitRatio ?? 0.5;
+  assertRate("splitRatio", split);
+
+  const total = Math.max(0, Math.round(input.totalEligibleSessions));
+  const mipoSessions = Math.round(total * split);
+  const controlSessions = total - mipoSessions;
+
+  const controlReturnRate = input.observedControlReturnRate;
+  const controlReturns = Math.round(controlSessions * controlReturnRate);
+  const controlCostCents = controlReturns * input.averageReturnCostCents;
+
+  // No grupo MIPO, a taxa de devolução cai pela fração de devoluções evitáveis que foram aceitas
+  const relativeReduction = input.mipoAcceptanceRate * input.avoidableReturnShare;
+  const mipoReturnRate = controlReturnRate * (1 - relativeReduction);
+  const mipoReturns = Math.round(mipoSessions * mipoReturnRate);
+  const mipoCostCents = mipoReturns * input.averageReturnCostCents;
+
+  // Devoluções evitadas normalizadas para a escala do grupo MIPO
+  const baselineReturnsIfNoMipo = Math.round(mipoSessions * controlReturnRate);
+  const avoidedReturns = Math.max(0, baselineReturnsIfNoMipo - mipoReturns);
+  const potentialReturnCostAvoidedCents = avoidedReturns * input.averageReturnCostCents;
+
+  return {
+    control: {
+      sessions: controlSessions,
+      returns: controlReturns,
+      returnRate: controlReturnRate,
+      reverseLogisticsCostCents: controlCostCents,
+    },
+    mipo: {
+      sessions: mipoSessions,
+      returns: mipoReturns,
+      returnRate: mipoReturnRate,
+      reverseLogisticsCostCents: mipoCostCents,
+    },
+    delta: {
+      avoidedReturns,
+      relativeReductionRate: relativeReduction,
+      potentialReturnCostAvoidedCents,
+    },
+    assumptions: [
+      "A divisão de tráfego é apenas o desenho proposto; nenhuma sessão foi randomizada por esta função.",
+      "A taxa do grupo MIPO é projetada a partir de adesão e parcela evitável assumidas.",
+      "O custo potencialmente evitado é uma projeção e não economia observada ou capturada.",
+      "Significância e causalidade só podem ser calculadas com contagens reais dos dois grupos.",
+    ],
+    status: "scenario_projection",
+  };
+}

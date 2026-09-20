@@ -8,10 +8,12 @@ import { localCommerceRepository, recordMipoEvent } from "@/src/services/local-c
 import { commerceApi } from "@/src/services/commerce-api";
 import { evaluateCheckoutRisk, evaluateSelectionContext, type RiskResult } from "@/src/services/mipo";
 import { productQuestions } from "@/src/services/product-profile";
+import type { PilotGroup, PilotOrderResult } from "@/src/domain/pilot-checkout";
 
 type View = "catalog" | "product" | "cart" | "checkout" | "success";
 
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+const textileElasticityLabel = { none: "sem elasticidade", low: "baixa", medium: "média", high: "alta", unknown: "não informada" } as const;
 
 function Icon({ name }: { name: "bag" | "arrow" | "spark" | "close" | "minus" | "plus" | "menu" }) {
   const paths = {
@@ -141,7 +143,7 @@ function Catalog({ products, onProduct }: { products: Product[]; onProduct: (pro
       </section>
 
       <section className="promise-strip" aria-label="Diferenciais">
-        <span>troca simples</span><i>◆</i><span>materiais escolhidos</span><i>◆</i><span>assistência de tamanho</span><i>◆</i><span>envio para todo brasil</span>
+        <span>curadoria visual</span><i>◆</i><span>informação rastreável</span><i>◆</i><span>assistência de tamanho</span><i>◆</i><span>experiência demonstrativa</span>
       </section>
 
       <section className="collection" id="colecao">
@@ -155,7 +157,7 @@ function Catalog({ products, onProduct }: { products: Product[]; onProduct: (pro
                 <span className="quick-view">Ver detalhes <Icon name="arrow" /></span>
               </button>
               <div className="product-card__info">
-                <div><p>{product.category}</p><h3>{product.title}</h3><span className="rating" aria-label="Avaliação 4,8 de 5">★★★★★ <small>4,8</small></span></div>
+                <div><p>{product.category}</p><h3>{product.title}</h3></div>
                 <strong>{money.format(product.variants[0].price / 100)}</strong>
               </div>
             </article>
@@ -171,6 +173,193 @@ function Catalog({ products, onProduct }: { products: Product[]; onProduct: (pro
   );
 }
 
+type BodyMetric = "bust" | "waist" | "hip";
+
+const SIZING_GUIDE: Record<BodyMetric, { label: string; ranges: Record<"P" | "M" | "G" | "GG", { min: number; max: number; ideal: number }> }> = {
+  bust: {
+    label: "Busto",
+    ranges: {
+      P: { min: 82, max: 88, ideal: 85 },
+      M: { min: 89, max: 95, ideal: 92 },
+      G: { min: 96, max: 102, ideal: 99 },
+      GG: { min: 103, max: 110, ideal: 106 },
+    },
+  },
+  waist: {
+    label: "Cintura",
+    ranges: {
+      P: { min: 64, max: 70, ideal: 67 },
+      M: { min: 71, max: 77, ideal: 74 },
+      G: { min: 78, max: 84, ideal: 81 },
+      GG: { min: 85, max: 92, ideal: 88 },
+    },
+  },
+  hip: {
+    label: "Quadril",
+    ranges: {
+      P: { min: 92, max: 98, ideal: 95 },
+      M: { min: 99, max: 105, ideal: 102 },
+      G: { min: 106, max: 112, ideal: 109 },
+      GG: { min: 113, max: 120, ideal: 116 },
+    },
+  },
+};
+
+function VisualSizer({
+  product,
+  selectedVariant,
+  onSelectVariant,
+}: {
+  product: Product;
+  selectedVariant: ProductVariant | null;
+  onSelectVariant: (variant: ProductVariant) => void;
+}) {
+  const isBottom = product.category === "Calças" || product.title.toLowerCase().includes("calça") || product.title.toLowerCase().includes("saia");
+  const defaultMetric: BodyMetric = isBottom ? "hip" : "bust";
+  const [metric, setMetric] = useState<BodyMetric>(defaultMetric);
+  const guide = SIZING_GUIDE[metric];
+
+  const [measurement, setMeasurement] = useState<number>(guide.ranges.M.ideal);
+
+  function handleMetricChange(nextMetric: BodyMetric) {
+    setMetric(nextMetric);
+    setMeasurement(SIZING_GUIDE[nextMetric].ranges.M.ideal);
+  }
+
+  const idealSizeMatch = (["P", "M", "G", "GG"] as const).find((s) => {
+    const r = guide.ranges[s];
+    return measurement >= r.min && measurement <= r.max;
+  }) ?? (measurement < guide.ranges.P.min ? "P" : "GG");
+
+  const currentSize = selectedVariant?.size as "P" | "M" | "G" | "GG" | undefined;
+  const currentRange = currentSize ? guide.ranges[currentSize] : undefined;
+
+  let fitStatus: "fitted" | "balanced" | "loose" = "balanced";
+  let fitDescription = "";
+
+  if (currentRange) {
+    if (measurement > currentRange.max) {
+      fitStatus = "fitted";
+      fitDescription = `Mais Ajustado — Sua medida de ${measurement}cm está acima da referência para ${currentSize} (${currentRange.min}–${currentRange.max}cm). O caimento será rente ao corpo.`;
+    } else if (measurement < currentRange.min) {
+      fitStatus = "loose";
+      fitDescription = `Fluido & Amplo — Sua medida de ${measurement}cm proporciona folga confortável no tamanho ${currentSize} (${currentRange.min}–${currentRange.max}cm), para um visual relaxado.`;
+    } else {
+      fitStatus = "balanced";
+      fitDescription = `Equilibrado & Ideal — No tamanho ${currentSize}, a peça vestirá precisamente a silhueta da modelagem Vértice para seus ${measurement}cm de ${guide.label.toLowerCase()}.`;
+    }
+  } else {
+    fitDescription = `Para ${measurement}cm de ${guide.label.toLowerCase()}, a modelagem sugerida de alfaiataria é ${idealSizeMatch}.`;
+  }
+
+  const presetValues = metric === "waist" ? [66, 72, 78, 86] : metric === "hip" ? [94, 100, 106, 114] : [84, 90, 96, 104];
+
+  return (
+    <div className="visual-sizer reveal">
+      <div className="visual-sizer__header">
+        <div className="visual-sizer__title">
+          <Icon name="spark" />
+          <span>Provador Visual de Medidas Relativas</span>
+        </div>
+        <div className="visual-sizer__metrics" role="tablist" aria-label="Medida corporal">
+          {(["bust", "waist", "hip"] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              className={`visual-sizer__metric-tab ${metric === m ? "is-active" : ""}`}
+              onClick={() => handleMetricChange(m)}
+            >
+              {SIZING_GUIDE[m].label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="visual-sizer__body">
+        <div className="visual-sizer__input-row">
+          <label htmlFor="body-measurement-slider">
+            Sua medida de {guide.label.toLowerCase()}: <strong>{measurement} cm</strong>
+          </label>
+          <div className="visual-sizer__presets">
+            {presetValues.map((val) => (
+              <button
+                key={val}
+                type="button"
+                className={`visual-sizer__preset-chip ${measurement === val ? "is-selected" : ""}`}
+                onClick={() => setMeasurement(val)}
+              >
+                {val} cm
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <input
+          id="body-measurement-slider"
+          type="range"
+          min={metric === "waist" ? 60 : metric === "hip" ? 86 : 76}
+          max={metric === "waist" ? 100 : metric === "hip" ? 126 : 116}
+          value={measurement}
+          onChange={(e) => setMeasurement(Number(e.target.value))}
+          className="visual-sizer__slider"
+          aria-label={`Ajustar medida de ${guide.label.toLowerCase()} em centímetros`}
+        />
+
+        {/* Visual Fit Gauge */}
+        <div className="visual-sizer__gauge">
+          <div className="visual-sizer__gauge-track">
+            <div
+              className={`visual-sizer__gauge-segment ${fitStatus === "fitted" ? "is-active" : ""}`}
+            >
+              <span>Ajustado</span>
+            </div>
+            <div
+              className={`visual-sizer__gauge-segment ${fitStatus === "balanced" ? "is-active" : ""}`}
+            >
+              <span>Equilibrado</span>
+            </div>
+            <div
+              className={`visual-sizer__gauge-segment ${fitStatus === "loose" ? "is-active" : ""}`}
+            >
+              <span>Fluido / Amplo</span>
+            </div>
+          </div>
+        </div>
+
+        <p className="visual-sizer__feedback">{fitDescription}</p>
+
+        {/* Quick Size Matrix Buttons */}
+        <div className="visual-sizer__size-matrix">
+          <span className="visual-sizer__matrix-label">Projeção por tamanho:</span>
+          <div className="visual-sizer__matrix-buttons">
+            {(["P", "M", "G", "GG"] as const).map((sizeKey) => {
+              const variant = product.variants.find((v) => v.size === sizeKey);
+              if (!variant) return null;
+              const r = guide.ranges[sizeKey];
+              const isSelected = selectedVariant?.id === variant.id;
+              const isRecommended = idealSizeMatch === sizeKey;
+              const relation = measurement > r.max ? "Ajustado" : measurement < r.min ? "Fluido" : "Ideal";
+
+              return (
+                <button
+                  key={sizeKey}
+                  type="button"
+                  className={`visual-sizer__matrix-chip ${isSelected ? "is-selected" : ""} ${isRecommended ? "is-recommended" : ""}`}
+                  onClick={() => onSelectVariant(variant)}
+                  title={`Selecionar tamanho ${sizeKey} (${relation})`}
+                >
+                  <b>{sizeKey}</b>
+                  <small>{relation}</small>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ProductDetail({
   product,
   persistent,
@@ -179,14 +368,16 @@ function ProductDetail({
   onAlternative,
   onOpenConcierge,
   suggestedSize,
+  pilotGroup,
 }: {
   product: Product;
   persistent: boolean;
   onBack: () => void;
-  onAdded: (product: Product, variant: ProductVariant, decision?: "accepted" | "kept_original", selectionContext?: SelectionContext) => void | Promise<void>;
+  onAdded: (product: Product, variant: ProductVariant, decision?: "accepted" | "kept_original" | "not_required", selectionContext?: SelectionContext) => void | Promise<void>;
   onAlternative: (id: string) => void;
   onOpenConcierge: (product: Product) => void;
   suggestedSize?: Size | null;
+  pilotGroup: PilotGroup;
 }) {
   const [selected, setSelected] = useState<ProductVariant | null>(null);
   const [decision, setDecision] = useState<"accepted" | "kept_original" | undefined>();
@@ -199,6 +390,7 @@ function ProductDetail({
   const [aiLoading, setAiLoading] = useState(false);
   const [aiAssisted, setAiAssisted] = useState(false);
   const [decisionLoading, setDecisionLoading] = useState(false);
+  const [evaluationError, setEvaluationError] = useState("");
   const activeIntervention = useRef<string|undefined>(undefined);
   const decisionRef = useRef<typeof decision>(undefined);
   const sizePickerRef = useRef<HTMLFieldSetElement>(null);
@@ -206,11 +398,20 @@ function ProductDetail({
   const isApparel = product.productKind === "apparel" || (!product.productKind && product.category !== "Maquiagem");
 
   async function choose(variant: ProductVariant, fit = fitPreference, userSize = usualSize) {
+    if (variant.inventory_quantity === 0) return;
     setSelected(variant);
     setDecision(undefined);
     decisionRef.current = undefined;
     setAiAssisted(false);
     setResult(null); // Do not show premature or mocked result while analyzing!
+    setEvaluationError("");
+
+    if (pilotGroup === "control") {
+      setInterventionId(undefined);
+      activeIntervention.current = undefined;
+      setAiLoading(false);
+      return;
+    }
 
     if (!isApparel && (!selectionContext || Object.keys(selectionContext.answers ?? {}).length < productQuestions(product).length)) {
       setInterventionId(undefined);
@@ -222,18 +423,25 @@ function ProductDetail({
     let currentInterventionId = `local-${crypto.randomUUID()}`;
     let initialResult: RiskResult;
 
-    if (persistent) {
-      const response = await commerceApi.evaluate(product.id, variant.id, fit, isApparel ? undefined : selectionContext, userSize);
-      initialResult = response.result;
-      currentInterventionId = response.interventionId;
-    } else {
-      initialResult = selectionContext
-        ? evaluateSelectionContext(product, variant, selectionContext)
-        : evaluateCheckoutRisk(product, variant, fit, undefined, userSize);
+    try {
+      if (persistent) {
+        const response = await commerceApi.evaluate(product.id, variant.id, fit, isApparel ? undefined : selectionContext, userSize);
+        initialResult = response.result;
+        currentInterventionId = response.interventionId;
+      } else {
+        initialResult = selectionContext
+          ? evaluateSelectionContext(product, variant, selectionContext)
+          : evaluateCheckoutRisk(product, variant, fit, undefined, userSize);
+      }
+    } catch (error) {
+      setEvaluationError(error instanceof Error ? error.message : "Não foi possível avaliar esta escolha.");
+      setAiLoading(false);
+      return;
     }
 
     setInterventionId(currentInterventionId);
     activeIntervention.current = currentInterventionId;
+    setResult(initialResult);
     setAiLoading(true);
 
     try {
@@ -309,15 +517,18 @@ function ProductDetail({
       if (persistent && interventionId && !result?.recommendedVariant && !result?.alternativeProductId) {
         await commerceApi.decide(interventionId, "not_required");
       }
-      await onAdded(product, selected, decision, selectionContext);
+      await onAdded(product, selected, decision ?? (interventionId && result ? "not_required" : undefined), selectionContext);
     } finally {
       setAddingToCart(false);
     }
   }
 
-  const contextualQuestions = isApparel ? [] : productQuestions(product);
+  const contextualQuestions = isApparel || pilotGroup === "control" ? [] : productQuestions(product);
   const selectedLabel = selected ? variantLabel(product, selected, product.variants.findIndex((variant) => variant.id === selected.id)) : "selecione";
   const requiresDecision = Boolean(result && result.risk !== "none" && !decision && (result.recommendedVariant || result.alternativeProductId));
+  const orderedVariants = isApparel
+    ? [...product.variants].sort((left, right) => ["P", "M", "G", "GG"].indexOf(left.size ?? "") - ["P", "M", "G", "GG"].indexOf(right.size ?? ""))
+    : product.variants;
 
   return (
     <main className="detail-page">
@@ -327,41 +538,43 @@ function ProductDetail({
         <section className="detail-copy">
           <span className="detail-badge">Nova coleção</span><p className="eyebrow">{product.category} · Vértice edição 06</p>
           <h1>{product.title}</h1>
-          <p className="detail-rating">★★★★★ <span>4,8 (128 avaliações)</span></p>
           <p className="price">{money.format(product.variants[0].price / 100)}</p>
           <p className="description">{product.description}</p>
+          {product.textileProfile && <div className="textile-profile"><p className="eyebrow">Ficha têxtil</p><p><strong>{product.textileProfile.composition ?? product.textileProfile.material}</strong> · Elasticidade {textileElasticityLabel[product.textileProfile.elasticity]}</p>{product.textileProfile.drape && <p>{product.textileProfile.drape}</p>}<small>Origem: {product.textileProfile.origin === "provided" ? "catálogo" : product.textileProfile.origin === "derived" ? "derivada do catálogo" : "descrição editorial demonstrativa"}</small></div>}
 
           <fieldset className="size-picker" ref={sizePickerRef}>
             <legend>
-              <span>{isApparel ? "Tamanho" : product.variantAttribute === "shade" ? "Tom" : "Variação"}: <b>{selectedLabel}</b></span>
-              {isApparel && <button type="button" onClick={() => onOpenConcierge(product)}>Guia & Concierge de medidas</button>}
+              <span>{isApparel ? "Escolha seu tamanho" : product.variantAttribute === "shade" ? "Escolha o tom" : "Escolha a variação"}</span>
+              <b>{selectedLabel}</b>
             </legend>
-            <div>{product.variants.map((variant, index) => <button id={`size-${variant.id}`} type="button" className={selected?.id === variant.id ? "selected" : ""} onClick={() => choose(variant)} key={variant.id}>{variantLabel(product, variant, index)}</button>)}</div>
+            <div>{orderedVariants.map((variant, index) => <button id={`size-${variant.id}`} type="button" disabled={variant.inventory_quantity === 0} aria-pressed={selected?.id === variant.id} className={selected?.id === variant.id ? "selected" : ""} onClick={() => choose(variant)} key={variant.id}>{variantLabel(product, variant, index)}{variant.inventory_quantity === 0 ? " · Esgotado" : ""}</button>)}</div>
           </fieldset>
 
-          <button type="button" className="mipo-inline-concierge-btn" onClick={() => onOpenConcierge(product)}>
-            <Icon name="spark" />
-            <span>Dúvidas de caimento, tecido ou combinações? Fale com a MIPO Atelier</span>
-          </button>
-
-          {isApparel && <>
-            <fieldset className="fit-picker">
-              <legend>Qual tamanho você costuma usar?</legend>
-              <div>{(["P","M","G","GG"] as const).map((value) => <button type="button" key={value} aria-pressed={usualSize === value} className={usualSize === value ? "selected" : ""} onClick={() => { setUsualSize(value); if (selected) void choose(selected, fitPreference, value); }}>{value}</button>)}</div>
-              <small>Essa resposta ajuda a contextualizar sua escolha, sem determinar o tamanho por você.</small>
-            </fieldset>
-            <fieldset className="fit-picker">
-              <legend>Como você prefere o caimento?</legend>
-              <div>{([["fitted","Mais ajustado"],["regular","Regular"],["loose","Mais solto"]] as const).map(([value,label]) => <button type="button" key={value} aria-pressed={fitPreference === value} className={fitPreference === value ? "selected" : ""} onClick={() => { setFitPreference(value); if (selected) void choose(selected, value); }}>{label}</button>)}</div>
-              <small>Usamos essa preferência para comparar o histórico de tamanho e elasticidade do tecido.</small>
-            </fieldset>
-          </>}
+          {pilotGroup === "treatment" && isApparel && <details className="fit-assistant">
+            <summary>
+              <span><Icon name="spark"/><b>Quer ajuda para decidir?</b></span>
+              <small>Conte seu tamanho habitual e o caimento desejado</small>
+            </summary>
+            <div className="fit-assistant__body">
+              <fieldset className="fit-picker">
+                <legend>Seu tamanho habitual</legend>
+                <div>{(["P","M","G","GG"] as const).map((value) => <button type="button" key={value} aria-pressed={usualSize === value} className={usualSize === value ? "selected" : ""} onClick={() => { setUsualSize(value); if (selected) void choose(selected, fitPreference, value); }}>{value}</button>)}</div>
+              </fieldset>
+              <fieldset className="fit-picker">
+                <legend>Como você gosta de vestir?</legend>
+                <div>{([["fitted","Mais ajustado"],["regular","Equilibrado"],["loose","Mais solto"]] as const).map(([value,label]) => <button type="button" key={value} aria-pressed={fitPreference === value} className={fitPreference === value ? "selected" : ""} onClick={() => { setFitPreference(value); if (selected) void choose(selected, value); }}>{label}</button>)}</div>
+              </fieldset>
+              <p>Essas preferências refinam a orientação, mas você mantém a decisão final.</p>
+              <button type="button" className="mipo-inline-concierge-btn" onClick={() => onOpenConcierge(product)}><Icon name="spark"/><span>Conversar com a MIPO Atelier</span></button>
+            </div>
+          </details>}
 
           {!isApparel && contextualQuestions.map((question) => <fieldset className="fit-picker" key={question.id}><legend>{question.label}</legend><div>{question.options.map((option) => <button type="button" key={option} aria-pressed={selectionContext?.answers?.[question.id] === option} className={selectionContext?.answers?.[question.id] === option ? "selected" : ""} onClick={() => { const answers = { ...(selectionContext?.answers ?? {}), [question.id]: option }; const first = Object.values(answers)[0] ?? option; setSelectionContext({ label: "Preferências do produto", preference: first, answers }); setResult(null); setInterventionId(undefined); activeIntervention.current=undefined; }}>{option}</button>)}</div></fieldset>)}
           {!isApparel && selected && selectionContext && Object.keys(selectionContext.answers ?? {}).length === contextualQuestions.length && !result && !aiLoading && <button type="button" className="agent-continue" onClick={() => void choose(selected)}>Pedir orientação ao agente<Icon name="spark" /></button>}
+          {evaluationError && <div className="mipo-inline-error" role="alert"><p>{evaluationError}</p>{selected && <button type="button" onClick={() => void choose(selected)}>Tentar novamente</button>}</div>}
 
           {/* Feedback State 1: Active AI Analyzing Thinking State */}
-          {selected && aiLoading && (
+          {selected && aiLoading && !result && (
             <aside className="mipo-card mipo-card--analyzing" aria-live="polite">
               <div className="mipo-card__mark mipo-card__mark--pulse">
                 <Icon name="spark" />
@@ -381,14 +594,17 @@ function ProductDetail({
           )}
 
           {/* Feedback State 2: Final Evaluated AI Response (no preliminary flashing) */}
-          {selected && result && !aiLoading && (
+          {selected && result && (
             <aside className={`mipo-card mipo-card--${result.risk} reveal`} aria-live="polite">
               <div className="mipo-card__mark"><Icon name="spark" /></div>
               <div>
-                <p className="mipo-label">Escolha assistida · MIPO {aiAssisted && <span>· Explicação contextual por IA</span>}</p>
+                <p className="mipo-label">Escolha assistida · MIPO {aiLoading ? <span>· Refinando explicação…</span> : aiAssisted && <span>· Explicação contextual por IA</span>}</p>
                 <h2>{result.message}</h2>
-                <p className="mipo-score">Score determinístico: <strong>{result.score}/100</strong> · evidência coberta: {Math.round(result.evidenceCoverage * 100)}%</p>
-                <p>{result.evidence}</p>
+                <details className="mipo-evidence">
+                  <summary>Por que estamos sugerindo isso?</summary>
+                  <p>{result.evidence}</p>
+                  <small>Regra determinística · score {result.score}/100 · cobertura de evidência {Math.round(result.evidenceCoverage * 100)}%</small>
+                </details>
                 {(result.recommendedVariant || result.alternativeProductId) && !decision && <div className="mipo-actions">
                   {result.recommendedVariant && <button type="button" disabled={decisionLoading} onClick={acceptRecommendation}>{decisionLoading ? "Aplicando tamanho…" : `Usar tamanho ${result.recommendedVariant.size}`}</button>}
                   {result.alternativeProductId && <button type="button" onClick={() => onAlternative(result.alternativeProductId!)}>Ver alternativa</button>}
@@ -399,7 +615,7 @@ function ProductDetail({
             </aside>
           )}
 
-          <button className="primary-action" disabled={!selected || aiLoading || addingToCart || decisionLoading || requiresDecision || (!isApparel && Object.keys(selectionContext?.answers ?? {}).length < contextualQuestions.length)} onClick={handleAddToCart}>
+          <button className="primary-action" disabled={!selected || addingToCart || decisionLoading || requiresDecision || (!isApparel && Object.keys(selectionContext?.answers ?? {}).length < contextualQuestions.length)} onClick={handleAddToCart}>
             {addingToCart ? (
               <>
                 <span>Adicionando à sacola…</span>
@@ -412,7 +628,7 @@ function ProductDetail({
               </>
             )}
           </button>
-          <div className="detail-notes"><span>Frete grátis acima de R$ 500</span><span>Troca em até 30 dias</span></div>
+          <div className="detail-notes"><span>Ambiente demonstrativo</span><span>Nenhuma cobrança será realizada</span></div>
         </section>
       </div>
     </main>
@@ -495,20 +711,25 @@ function CartAuditCard({ cart, onOpenConcierge }: { cart: Cart; onOpenConcierge:
 
 function CartView({
   cart,
+  products = [],
   onQuantity,
   onRemove,
   onCheckout,
   onCatalog,
   onOpenConcierge,
+  mipoEnabled,
 }: {
   cart: Cart;
+  products?: Product[];
   onQuantity: (id: string, quantity: number) => void;
   onRemove: (id: string) => void;
   onCheckout: () => void;
   onCatalog: () => void;
-  onOpenConcierge: () => void;
+  onOpenConcierge: (product?: Product) => void;
+  mipoEnabled: boolean;
 }) {
   const total = cart.items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+
   return (
     <main className="cart-page">
       <div className="page-kicker">
@@ -524,30 +745,41 @@ function CartView({
       ) : (
         <div className="cart-layout">
           <section className="cart-lines">
-            {cart.items.map((item) => (
-              <article className="cart-line" key={item.id}>
-                <div className="cart-swatch" style={{ background: item.color }} />
-                <div className="cart-line__copy">
-                  <p className="eyebrow">Vértice · edição 06</p>
-                  <h2>{item.title}</h2>
-                  <p>{item.size ? `Tamanho ${item.size}` : "Variação selecionada"}</p>
-                  {item.mipoDecision && (
-                    <small>
-                      <Icon name="spark" /> {item.mipoDecision === "accepted" ? "Tamanho escolhido com assistência MIPO" : "Escolha pessoal mantida"}
-                    </small>
-                  )}
-                </div>
-                <div className="quantity">
-                  <button aria-label="Diminuir quantidade" onClick={() => onQuantity(item.id, item.quantity - 1)}><Icon name="minus" /></button>
-                  <span>{item.quantity}</span>
-                  <button aria-label="Aumentar quantidade" onClick={() => onQuantity(item.id, item.quantity + 1)}><Icon name="plus" /></button>
-                </div>
-                <strong>{money.format((item.unitPrice * item.quantity) / 100)}</strong>
-                <button className="remove" aria-label={`Remover ${item.title}`} onClick={() => onRemove(item.id)}><Icon name="close" /></button>
-              </article>
-            ))}
+            {cart.items.map((item) => {
+              const matchedProduct = products.find((p) => p.id === item.productId || p.title === item.title);
 
-            <CartAuditCard cart={cart} onOpenConcierge={onOpenConcierge} />
+              return (
+                <article className="cart-line" key={item.id}>
+                  <div className="cart-swatch" style={{ background: item.color }} />
+                  <div className="cart-line__copy">
+                    <p className="eyebrow">Vértice · edição 06</p>
+                    <h2>{item.title}</h2>
+                    <p>{item.size ? `Tamanho ${item.size}` : "Variação selecionada"}</p>
+                    {item.mipoDecision && (
+                      <small>
+                        <Icon name="spark" /> {item.mipoDecision === "accepted" ? "Tamanho escolhido com assistência MIPO" : item.mipoDecision === "not_required" ? "Escolha revisada · sem ajuste necessário" : item.mipoDecision === "pending" ? "Revisão de caimento pendente" : "Escolha pessoal mantida"}
+                      </small>
+                    )}
+
+                    {mipoEnabled && item.size && matchedProduct && (
+                      <div className="cart-item-coherence cart-item-coherence--harmonized">
+                        <span className="cart-item-coherence__badge"><Icon name="spark"/> Tamanho {item.size} avaliado para esta peça</span>
+                        <button type="button" className="cart-item-coherence__action" onClick={() => onOpenConcierge(matchedProduct)}>Revisar caimento</button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="quantity">
+                    <button aria-label="Diminuir quantidade" onClick={() => onQuantity(item.id, item.quantity - 1)}><Icon name="minus" /></button>
+                    <span>{item.quantity}</span>
+                    <button aria-label="Aumentar quantidade" onClick={() => onQuantity(item.id, item.quantity + 1)}><Icon name="plus" /></button>
+                  </div>
+                  <strong>{money.format((item.unitPrice * item.quantity) / 100)}</strong>
+                  <button className="remove" aria-label={`Remover ${item.title}`} onClick={() => onRemove(item.id)}><Icon name="close" /></button>
+                </article>
+              );
+            })}
+
+            {mipoEnabled && <CartAuditCard cart={cart} onOpenConcierge={() => onOpenConcierge()} />}
           </section>
 
           <aside className="summary">
@@ -565,7 +797,7 @@ function CartView({
   );
 }
 
-function Checkout({ cart, onFinish, onBack }: { cart: Cart; onFinish: () => void; onBack: () => void }) {
+function Checkout({ cart, onFinish, onBack, submitting, error }: { cart: Cart; onFinish: () => void; onBack: () => void; submitting: boolean; error: string }) {
   const total = cart.items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
   return (
     <main className="checkout-page">
@@ -576,7 +808,8 @@ function Checkout({ cart, onFinish, onBack }: { cart: Cart; onFinish: () => void
           <section className="form-section"><span className="step-number">01</span><div><h2>Contato</h2><label>E-mail demonstrativo<input required type="email" name="email" autoComplete="email" spellCheck={false} placeholder="Ex.: demo@vertice.local…" /></label></div></section>
           <section className="form-section"><span className="step-number">02</span><div><h2>Entrega simulada</h2><div className="form-grid"><label>Nome fictício<input required name="name" autoComplete="name" placeholder="Ex.: Cliente Demo…" /></label><label>CEP fictício<input required name="postal-code" autoComplete="postal-code" inputMode="numeric" placeholder="Ex.: 00000-000…" /></label><label className="wide">Endereço fictício<input required name="address" autoComplete="street-address" placeholder="Ex.: Rua da Demonstração, 100…" /></label><label>Cidade<input required name="city" autoComplete="address-level2" placeholder="Ex.: São Paulo…" /></label><label>UF<select name="state" autoComplete="address-level1" defaultValue="SP"><option>SP</option><option>RJ</option><option>MG</option></select></label></div></div></section>
           <section className="form-section"><span className="step-number">03</span><div><h2>Pagamento visual</h2><label className="mock-payment"><input type="radio" defaultChecked name="payment"/> Cartão fictício <span>•••• 4242</span></label></div></section>
-          <button className="primary-action" type="submit">Concluir demonstração <Icon name="arrow" /></button>
+          {error && <p className="checkout-error" role="alert">{error}</p>}
+          <button className="primary-action" type="submit" disabled={submitting}>{submitting ? "Registrando escolha…" : "Concluir demonstração"} {!submitting && <Icon name="arrow" />}</button>
         </form>
         <aside className="summary"><p className="eyebrow">Sua escolha</p>{cart.items.map(item => <div className="checkout-item" key={item.id}><span>{item.quantity}× {item.title}{item.size ? ` · ${item.size}` : ""}{item.selectionContext && <small className="checkout-context">{item.selectionContext.label}: {item.selectionContext.preference}</small>}</span><strong>{money.format(item.unitPrice * item.quantity / 100)}</strong></div>)}<hr/><div className="summary__total"><span>Total demonstrativo</span><strong>{money.format(total / 100)}</strong></div></aside>
       </div>
@@ -613,7 +846,7 @@ function MipoAtelierDrawer({
   const [messages, setMessages] = useState<ChatItem[]>([
     {
       role: "assistant",
-      content: "Olá! Sou a MIPO Concierge do atelier Vértice. Posso te orientar sobre o caimento exato das peças, elasticidade dos tecidos (linho, tricot, lã fria), sugestões de combinações e cuidados de conservação. Em que posso te ajudar hoje?",
+      content: "Olá! Sou a MIPO Concierge do atelier Vértice. Posso orientar sobre caimento, composição, elasticidade, combinações e cuidados quando essas informações estiverem disponíveis na ficha da peça. Em que posso ajudar?",
     },
   ]);
   const [input, setInput] = useState("");
@@ -665,7 +898,7 @@ function MipoAtelierDrawer({
         ...nextMessages,
         {
           role: "assistant",
-          content: "Tive um pequeno contratempo de conexão com o atelier. No entanto, lembre-se: peças em linho puro não possuem elastano, enquanto nossos tricots possuem modelagem fluida e confortável.",
+          content: "Tive um contratempo de conexão com o atelier. Para não inventar informações sobre tecido ou elasticidade, tente novamente quando a ficha da peça estiver disponível.",
         },
       ]);
     } finally {
@@ -811,6 +1044,11 @@ export function Storefront() {
   const [toast, setToast] = useState("");
   const [serviceError, setServiceError] = useState("");
   const [catalogLoading, setCatalogLoading] = useState(persistent);
+  const [pilotGroup, setPilotGroup] = useState<PilotGroup>("treatment");
+  const [completedOrder, setCompletedOrder] = useState<PilotOrderResult | null>(null);
+  const [checkoutSubmitting, setCheckoutSubmitting] = useState(false);
+  const [checkoutError, setCheckoutError] = useState("");
+  const checkoutKey = useRef<string | undefined>(undefined);
 
   // MIPO Concierge State
   const [isConciergeOpen, setIsConciergeOpen] = useState(false);
@@ -823,14 +1061,15 @@ export function Storefront() {
       setCatalogLoading(false);
       return;
     }
-    Promise.all([commerceApi.products(), commerceApi.cart()])
-      .then(([catalog, savedCart]) => {
+    Promise.all([commerceApi.products(), commerceApi.cart(), commerceApi.pilotAssignment()])
+      .then(([catalog, savedCart, assignment]) => {
         const validCatalog = catalog.filter((product) => product.title && product.variants.length > 0);
         if (!validCatalog.length || validCatalog.length > maxStorefrontProducts) {
           throw new Error(`Catálogo remoto fora do limite seguro (${validCatalog.length} produtos recebidos).`);
         }
         setProducts(validCatalog);
         setCart(savedCart);
+        setPilotGroup(assignment.group);
         if (validCatalog[0]) setActiveProduct(validCatalog[0]);
       })
       .catch((error) => setServiceError(error.message))
@@ -855,7 +1094,7 @@ export function Storefront() {
     setIsConciergeOpen(true);
   }
 
-  async function add(product: Product, variant: ProductVariant, decision?: "accepted" | "kept_original", selectionContext?: SelectionContext) {
+  async function add(product: Product, variant: ProductVariant, decision?: "accepted" | "kept_original" | "not_required", selectionContext?: SelectionContext) {
     const next = persistent
       ? await commerceApi.addItem(variant.id, 1, decision, selectionContext)
       : localCommerceRepository.addLineItem({
@@ -893,8 +1132,26 @@ export function Storefront() {
   }
 
   async function finishDemo() {
-    setCart(persistent ? await commerceApi.clearCart() : localCommerceRepository.clearCart());
-    setView("success");
+    if (checkoutSubmitting) return;
+    setCheckoutSubmitting(true);
+    setCheckoutError("");
+    try {
+      if (persistent) {
+        checkoutKey.current ??= crypto.randomUUID();
+        const order = await commerceApi.checkout(checkoutKey.current);
+        setCompletedOrder(order);
+        setCart(await commerceApi.cart());
+      } else {
+        setCompletedOrder({ id: crypto.randomUUID(), displayId: `DEMO-${Date.now().toString(36).toUpperCase()}`, group: pilotGroup, itemCount: cartCount, totalCents: cart.items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0), completedAt: new Date().toISOString() });
+        setCart(localCommerceRepository.clearCart());
+      }
+      checkoutKey.current = undefined;
+      setView("success");
+    } catch (error) {
+      setCheckoutError(error instanceof Error ? error.message : "Não foi possível registrar a escolha.");
+    } finally {
+      setCheckoutSubmitting(false);
+    }
   }
 
   return (
@@ -930,43 +1187,46 @@ export function Storefront() {
           }}
           onOpenConcierge={handleOpenConcierge}
           suggestedSize={conciergeSuggestedSize}
+          pilotGroup={pilotGroup}
         />
       )}
       {!serviceError && !catalogLoading && view === "cart" && (
         <CartView
           cart={cart}
+          products={products}
           onQuantity={(id, quantity) => void changeQuantity(id, quantity)}
           onRemove={(id) => void removeItem(id)}
           onCheckout={() => setView("checkout")}
           onCatalog={() => setView("catalog")}
-          onOpenConcierge={() => handleOpenConcierge()}
+          onOpenConcierge={(prod) => handleOpenConcierge(prod)}
+          mipoEnabled={pilotGroup === "treatment"}
         />
       )}
       {!serviceError && !catalogLoading && view === "checkout" && (
-        <Checkout cart={cart} onBack={() => setView("cart")} onFinish={() => void finishDemo()} />
+        <Checkout cart={cart} onBack={() => setView("cart")} onFinish={() => void finishDemo()} submitting={checkoutSubmitting} error={checkoutError} />
       )}
       {view === "success" && (
         <main className="success-page">
           <p className="eyebrow">Demonstração concluída</p>
           <span className="success-mark">✓</span>
           <h1>Escolha registrada.<br /><em>Nenhuma compra foi realizada.</em></h1>
-          <p>O fluxo visual terminou aqui. Em uma integração real, o pedido seria criado pelo backend Medusa.</p>
+          <p>{completedOrder ? `Registro ${completedOrder.displayId} criado com ${completedOrder.itemCount} ${completedOrder.itemCount === 1 ? "item" : "itens"}.` : "A escolha demonstrativa foi concluída."} Nenhuma cobrança ou pedido comercial foi realizado.</p>
           <button className="primary-action" onClick={() => setView("catalog")}>Voltar à coleção <Icon name="arrow" /></button>
         </main>
       )}
 
       {/* Floating MIPO Atelier Trigger Button */}
-      <button
+      {pilotGroup === "treatment" && <button
         className="mipo-floating-trigger"
         onClick={() => handleOpenConcierge()}
         aria-label="Abrir consultoria MIPO Atelier"
       >
         <span className="mipo-floating-trigger__spark"><Icon name="spark" /></span>
         <span className="mipo-floating-trigger__label">MIPO Atelier <em>· Consultoria</em></span>
-      </button>
+      </button>}
 
       {/* MIPO Atelier Slide-out Drawer */}
-      <MipoAtelierDrawer
+      {pilotGroup === "treatment" && <MipoAtelierDrawer
         isOpen={isConciergeOpen}
         onClose={() => setIsConciergeOpen(false)}
         currentProduct={conciergeProductContext}
@@ -977,7 +1237,7 @@ export function Storefront() {
           setTimeout(() => setToast(""), 3000);
         }}
         onSelectProduct={(prod) => openProduct(prod)}
-      />
+      />}
 
       {toast && <div className="toast" role="status">{toast}</div>}
       <footer>
