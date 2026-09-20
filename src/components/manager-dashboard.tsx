@@ -22,6 +22,7 @@ import {
   simulateImpact,
   projectExperimentScenario,
 } from "@/src/domain/impact-simulator";
+import { WismoOperations } from "@/src/components/wismo-operations";
 
 type View = "executive" | "customers" | "operations";
 const money = new Intl.NumberFormat("pt-BR", {
@@ -1254,6 +1255,7 @@ export function ManagerDashboard() {
                 </ResponsiveContainer>
               </ChartCard>
             </div>
+            <WismoOperations service={data.service} />
             <section className="mipo-funnel" aria-labelledby="funnel-title">
               <div>
                 <p className="manager-eyebrow">Funil MIPO</p>
