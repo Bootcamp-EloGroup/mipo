@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { ManagerDashboardData } from "@/src/domain/manager-dashboard";
-import { WISMO_OUTCOME_LABELS, WISMO_STATUS_LABELS, type WismoDashboardData } from "@/src/domain/wismo-chat";
+import { WISMO_OUTCOME_LABELS, WISMO_RESOLUTION_LABELS, WISMO_STATUS_LABELS, type WismoDashboardData } from "@/src/domain/wismo-chat";
 import { wismoApi } from "@/src/services/wismo-api";
 import { WismoImpactSimulator } from "@/src/components/wismo-impact-simulator";
 import "./wismo-badge.css";
@@ -12,6 +12,7 @@ type Service = Pick<ManagerDashboardData["service"], "tickets" | "wismo" | "cost
 
 const count = new Intl.NumberFormat("pt-BR");
 const percent = new Intl.NumberFormat("pt-BR", { style: "percent", maximumFractionDigits: 0 });
+const oneDecimal = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const dateTime = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 
 function Metric({ label, value, note }: { label: string; value: string; note: string }) {
@@ -69,6 +70,16 @@ export function WismoOperations({ service }: { service: Service }) {
             <Metric label="Resolvidos pelo assistente" value={count.format(stats.resolved)} note={stats.botResolutionRate === null ? "Sem atendimentos concluídos" : `${percent.format(stats.botResolutionRate)} dos casos encontrados`} />
             <Metric label="Escalados" value={count.format(stats.escalated)} note="Sem atualização, inconclusivos ou pedidos do cliente" />
             <Metric label="Pedido não encontrado" value={count.format(stats.notFound)} note="Código sem correspondência" />
+            <Metric
+              label="Sem pendência após o atendimento"
+              value={stats.feedbackSolved + stats.feedbackPending > 0 ? percent.format(stats.feedbackSolved / (stats.feedbackSolved + stats.feedbackPending)) : "—"}
+              note={stats.feedbackSolved + stats.feedbackPending > 0 ? `${count.format(stats.feedbackSolved)} sem pendência · ${count.format(stats.feedbackPending)} com pendência` : "Nenhuma resposta ainda"}
+            />
+            <Metric
+              label="Avaliação média do atendimento"
+              value={stats.averageRating === null ? "—" : `${oneDecimal.format(stats.averageRating)} / 5`}
+              note={stats.ratedCount === 0 ? "Nenhuma avaliação ainda" : `${count.format(stats.ratedCount)} ${stats.ratedCount === 1 ? "avaliação" : "avaliações"} de 1 a 5`}
+            />
           </div>
           {stats.byStatus.length > 0 && (
             <ul className="wismo-ops__status" aria-label="Atendimentos por status logístico">
@@ -79,7 +90,7 @@ export function WismoOperations({ service }: { service: Service }) {
             <div className="manager-table-scroll wismo-ops__table">
               <table>
                 <caption className="sr-only">Atendimentos WISMO recentes</caption>
-                <thead><tr><th>Momento</th><th>Pedido</th><th>Status</th><th>Resultado</th><th>Motivo do escalonamento</th></tr></thead>
+                <thead><tr><th>Momento</th><th>Pedido</th><th>Status</th><th>Resultado</th><th>Pendência</th><th>Nota</th><th>Motivo do escalonamento</th></tr></thead>
                 <tbody>
                   {stats.recent.map((row) => (
                     <tr key={row.id}>
@@ -87,6 +98,8 @@ export function WismoOperations({ service }: { service: Service }) {
                       <td>{row.orderCode}</td>
                       <td><span className={`wismo-badge wismo-badge--${row.status}`}>{WISMO_STATUS_LABELS[row.status]}</span></td>
                       <td>{WISMO_OUTCOME_LABELS[row.outcome]}</td>
+                      <td>{row.resolution ? WISMO_RESOLUTION_LABELS[row.resolution] : "—"}</td>
+                      <td>{row.rating ? `${row.rating} / 5` : "—"}</td>
                       <td>{row.escalationReason ?? "—"}</td>
                     </tr>
                   ))}

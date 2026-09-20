@@ -58,6 +58,16 @@ export function outcomeFor(response: Pick<WismoStatusResponse, "found" | "needsE
   return response.needsEscalation ? "escalated" : "resolved";
 }
 
+/** Resposta do cliente à pergunta "ainda há alguma pendência?" feita após o atendimento. */
+export const WISMO_RESOLUTIONS = ["solved", "pending"] as const;
+export type WismoResolution = (typeof WISMO_RESOLUTIONS)[number];
+export const WISMO_RESOLUTION_LABELS: Record<WismoResolution, string> = { solved: "Sem pendência", pending: "Com pendência" };
+
+/** Nota do atendimento, de 1 (muito ruim) a 5 (muito bom). */
+export const WISMO_RATINGS = [1, 2, 3, 4, 5] as const;
+export type WismoRating = (typeof WISMO_RATINGS)[number];
+export const isWismoRating = (value: unknown): value is WismoRating => typeof value === "number" && (WISMO_RATINGS as readonly number[]).includes(value);
+
 const ORDER_CODE = /^[A-Z0-9][A-Z0-9-]{2,31}$/;
 export const normalizeOrderCode = (value: string): string => value.trim().toUpperCase();
 export const isValidOrderCode = (value: string): boolean => ORDER_CODE.test(value);
@@ -71,6 +81,10 @@ export type WismoEventInput = {
   outcome: WismoOutcome;
   escalationReason?: string;
   dataOrigin: WismoDataOrigin;
+  /** Opcional: resposta do cliente após o atendimento. */
+  resolution?: WismoResolution;
+  /** Opcional: nota de 1 a 5 dada pelo cliente. */
+  rating?: WismoRating;
 };
 
 export type WismoEvent = WismoEventInput & { occurredAt: string; updatedAt: string };
@@ -85,8 +99,14 @@ export type WismoDashboardData = {
   notFound: number;
   /** resolvidos / (resolvidos + escalados); pedidos não encontrados ficam de fora. */
   botResolutionRate: number | null;
+  /** Clientes que responderam "sem pendência" / "ainda há pendência" após o atendimento. */
+  feedbackSolved: number;
+  feedbackPending: number;
+  ratedCount: number;
+  /** Média das notas de 1 a 5; null sem avaliações. */
+  averageRating: number | null;
   byStatus: Array<{ status: WismoStatus; count: number }>;
-  recent: Array<Pick<WismoEvent, "id" | "occurredAt" | "orderCode" | "status" | "outcome" | "escalationReason" | "dataOrigin">>;
+  recent: Array<Pick<WismoEvent, "id" | "occurredAt" | "orderCode" | "status" | "outcome" | "escalationReason" | "dataOrigin" | "resolution" | "rating">>;
 };
 
 export const emptyWismoDashboard = (reason?: string): WismoDashboardData => ({
@@ -97,6 +117,10 @@ export const emptyWismoDashboard = (reason?: string): WismoDashboardData => ({
   escalated: 0,
   notFound: 0,
   botResolutionRate: null,
+  feedbackSolved: 0,
+  feedbackPending: 0,
+  ratedCount: 0,
+  averageRating: null,
   byStatus: [],
   recent: [],
 });
