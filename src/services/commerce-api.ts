@@ -32,4 +32,5 @@ export const commerceApi = {
   auditCart: (items: CartLine[]) => request<{ status: "aligned"|"attention"; headline: string; advice: string; careTips: string[] }>("/api/mipo/audit-cart", { method: "POST", body: JSON.stringify({ items }) }),
   pilotAssignment: () => request<{ group: PilotGroup }>("/api/pilot/assignment"),
   checkout: (idempotencyKey: string) => request<PilotOrderResult>("/api/checkout", { method: "POST", body: JSON.stringify({ idempotencyKey }) }),
+  fitFeedback: (productId: string, variantId: string, rating: "tight"|"ideal"|"loose") => request<{recorded:boolean}>("/api/mipo/fit-feedback", { method: "POST", body: JSON.stringify({ productId, variantId, rating }) }),
 };

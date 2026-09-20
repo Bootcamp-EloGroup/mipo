@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { products } from "../src/data/products";
 import { evaluateCheckout } from "../src/services/mipo";
-import { evaluateMeasurementFit, measurementAssessmentSummary, measurementFieldError, requiredMeasurements } from "../src/services/measurement-fit";
+import { evaluateMeasurementFit, measurementAssessmentSummary, measurementFieldError, requiredMeasurements, sizeGuideForProduct } from "../src/services/measurement-fit";
 
 describe("measurement fit", () => {
   it("usa busto, cintura e quadril para vestidos", () => {
@@ -41,7 +41,7 @@ describe("measurement fit", () => {
   it("identifica quais referências estão fora da grade", () => {
     const result = evaluateMeasurementFit(products[0], { bust: 70, waist: 64, hip: 92 });
     expect(result.status).toBe("out_of_range");
-    expect(result.evidence).toMatch(/busto abaixo da referência 82–110 cm/i);
+    expect(result.evidence).toMatch(/busto abaixo da referência 82–111 cm/i);
     expect(result.evidence).toMatch(/Confira como medir/i);
   });
 
@@ -59,6 +59,16 @@ describe("measurement fit", () => {
     expect(persisted).not.toContain("92");
     expect(persisted).not.toContain("74");
     expect(persisted).not.toContain("102");
+  });
+
+  it("usa grade específica e expõe comparação visual sem delegar o cálculo à IA", () => {
+    const aurora = sizeGuideForProduct(products[0]);
+    const eixo = sizeGuideForProduct(products.find((product) => product.id === "prod_eixo")!);
+    const assessment = evaluateMeasurementFit(products[0], { bust: 92, waist: 74, hip: 102 });
+    expect(aurora.version).not.toBe(eixo.version);
+    expect(assessment.guideLabel).toMatch(/Aurora/);
+    expect(assessment.sizeComparisons).toHaveLength(4);
+    expect(assessment.sizeComparisons.find((item) => item.size === "M")?.fit).toBe("balanced");
   });
 });
 

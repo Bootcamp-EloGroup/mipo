@@ -22,6 +22,8 @@ import {
   simulateImpact,
   projectExperimentScenario,
 } from "@/src/domain/impact-simulator";
+import { products as storefrontProducts } from "@/src/data/products";
+import { VERTICE_PRODUCT_SIZE_GUIDES } from "@/src/services/measurement-fit";
 
 type View = "executive" | "customers" | "operations";
 const money = new Intl.NumberFormat("pt-BR", {
@@ -1303,6 +1305,11 @@ export function ManagerDashboard() {
                   <small>{count.format(data.pilot.treatment.observed)} desfechos de {count.format(data.pilot.treatment.orders)} pedidos · {count.format(data.pilot.treatment.returns)} devoluções</small>
                 </article>
               </div>
+            </section>
+            <section className="size-governance" aria-labelledby="size-governance-title">
+              <header><div><p className="manager-eyebrow">Governança de produto</p><h2 id="size-governance-title">Grades usadas pelo assistente</h2></div><span className="origin origin--demo">Dados demonstrativos</span></header>
+              <p>A recomendação usa somente estas grades versionadas. Publicação comercial exige homologação da ficha técnica; a IA não altera faixas nem tamanhos.</p>
+              <div>{Object.values(VERTICE_PRODUCT_SIZE_GUIDES).map((guide) => <article key={guide.version}><span>{storefrontProducts.find((product) => product.id === guide.productId)?.title ?? guide.label}</span><strong>{guide.version}</strong><small>{guide.label}<br/>Métricas: {[...new Set(Object.values(guide.ranges).flatMap((ranges) => Object.keys(ranges)))].map((metric) => ({bust:"busto",waist:"cintura",hip:"quadril"})[metric as "bust"|"waist"|"hip"]).join(", ")}</small><b>Revisão necessária</b></article>)}</div>
             </section>
             <section className="agent-health">
               <header>

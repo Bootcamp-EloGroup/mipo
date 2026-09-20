@@ -161,6 +161,7 @@
 .pilot-results__grid article{display:grid;min-height:170px;padding:24px;background:#f7f5ed;border:1px solid var(--mgr-line)}
 .pilot-results__grid span,.pilot-results__grid small{font-size:13px;color:var(--mgr-muted)}
 .pilot-results__grid strong{align-self:end;font-size:44px;line-height:1}
+.size-governance{margin-top:48px;padding:32px;border:1px solid var(--mgr-line);background:#f7f5ed}.size-governance>header{display:flex;justify-content:space-between;gap:24px;align-items:flex-start}.size-governance h2{margin-top:6px;font-size:clamp(28px,2.4vw,32px)}.size-governance>p{max-width:820px;color:var(--mgr-muted);font-size:14px;line-height:1.55}.size-governance>div{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:24px}.size-governance article{display:grid;gap:8px;min-height:180px;padding:20px;border:1px solid var(--mgr-line);background:#fffef9}.size-governance article span,.size-governance article small{font-size:12px;color:var(--mgr-muted)}.size-governance article strong{font-size:17px}.size-governance article b{align-self:end;width:max-content;padding:6px 8px;background:#f4ead9;color:#80501f;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
 
 @media(max-width:1024px){
   .manager-shell{padding-inline:28px}
@@ -168,6 +169,7 @@
   .manager-kpis,.agent-health .manager-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
   .manager-chart-grid{grid-template-columns:1fr}
   .pilot-results__grid{grid-template-columns:1fr}
+  .size-governance>div{grid-template-columns:repeat(2,minmax(0,1fr))}
   .mipo-funnel{grid-template-columns:repeat(2,minmax(0,1fr))}
   .mipo-funnel>div:first-child{grid-column:1/-1;grid-row:auto}
 }
@@ -194,6 +196,7 @@
   .manager-topbar time,.manager-sync{display:none}
   .manager-hero h1{font-size:50px}
   .manager-hero dl,.manager-filters,.manager-kpis,.agent-health .manager-kpis,.marketing-summary>.manager-kpis,.mipo-funnel{grid-template-columns:1fr}
+  .size-governance{padding:20px}.size-governance>header{flex-direction:column}.size-governance>div{grid-template-columns:1fr}
   .manager-view{padding-top:40px}
   .view-heading h2{font-size:40px}
   .manager-metric{min-height:156px;padding:22px}

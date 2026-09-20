@@ -8,7 +8,7 @@ import { localCommerceRepository, recordMipoEvent } from "@/src/services/local-c
 import { commerceApi } from "@/src/services/commerce-api";
 import { evaluateCheckout, evaluateCheckoutRisk, evaluateSelectionContext, type RiskResult } from "@/src/services/mipo";
 import { productQuestions } from "@/src/services/product-profile";
-import { guideRange, measurementFieldError, measurementLimits, requiredMeasurements, VERTICE_SIZE_GUIDE } from "@/src/services/measurement-fit";
+import { guideRange, measurementFieldError, measurementLimits, requiredMeasurements, sizeGuideForProduct } from "@/src/services/measurement-fit";
 import type { PilotGroup, PilotOrderResult } from "@/src/domain/pilot-checkout";
 
 type View = "catalog" | "product" | "cart" | "checkout" | "success";
@@ -204,6 +204,7 @@ function ProductDetail({
   const [measurementError, setMeasurementError] = useState("");
   const [measurementErrors, setMeasurementErrors] = useState<Partial<Record<keyof BodyMeasurements, string>>>({});
   const [measurementsSaved, setMeasurementsSaved] = useState(false);
+  const [rememberMeasurements, setRememberMeasurements] = useState(false);
   const [selectionContext, setSelectionContext] = useState<SelectionContext>();
   const [evaluating, setEvaluating] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
@@ -217,15 +218,18 @@ function ProductDetail({
 
   const isApparel = product.productKind === "apparel" || (!product.productKind && product.category !== "Maquiagem");
   const requiredBodyMeasurements = requiredMeasurements(product);
+  const activeSizeGuide = sizeGuideForProduct(product);
 
   useEffect(() => {
     try {
-      const saved = sessionStorage.getItem("mipo-body-measurements");
+      const remembered = localStorage.getItem("mipo-body-measurements-consented");
+      const saved = sessionStorage.getItem("mipo-body-measurements") ?? remembered;
       if (!saved) return;
       const value = JSON.parse(saved) as BodyMeasurements;
       setMeasurements(value);
       setMeasurementDraft({ bust: value.bust?.toString() ?? "", waist: value.waist?.toString() ?? "", hip: value.hip?.toString() ?? "" });
       setMeasurementsSaved(true);
+      setRememberMeasurements(Boolean(remembered));
     } catch { /* perfil opcional: sessão inválida começa vazia */ }
   }, []);
 
@@ -320,6 +324,8 @@ function ProductDetail({
     if (!selected) { setMeasurementError("Escolha um tamanho acima para compararmos com suas medidas."); sizePickerRef.current?.focus(); return; }
     setMeasurementError(""); setMeasurementErrors({}); setMeasurements(next); setMeasurementsSaved(true); setEvaluating(true);
     sessionStorage.setItem("mipo-body-measurements", JSON.stringify(next));
+    if (rememberMeasurements) localStorage.setItem("mipo-body-measurements-consented", JSON.stringify(next));
+    else localStorage.removeItem("mipo-body-measurements-consented");
     try { await choose(selected, fitPreference, usualSize, next); } finally { setEvaluating(false); }
   }
 
@@ -327,6 +333,8 @@ function ProductDetail({
     const empty = { bust: "", waist: "", hip: "" };
     setMeasurements({}); setMeasurementDraft(empty); setMeasurementErrors({}); setMeasurementError(""); setMeasurementsSaved(false); setResult(null);
     sessionStorage.removeItem("mipo-body-measurements");
+    localStorage.removeItem("mipo-body-measurements-consented");
+    setRememberMeasurements(false);
   }
 
   // React to size suggestion from Concierge
@@ -392,6 +400,7 @@ function ProductDetail({
           <span className="detail-badge">Nova coleção</span><p className="eyebrow">{product.category} · Vértice edição 06</p>
           <h1>{product.title}</h1>
           <p className="price">{money.format(product.variants[0].price / 100)}</p>
+          <p className="installments">ou 6x de {money.format(product.variants[0].price / 600)} sem juros</p>
           <p className="description">{product.description}</p>
           {product.textileProfile && <div className="textile-profile"><p className="eyebrow">Ficha têxtil</p><p><strong>{product.textileProfile.composition ?? product.textileProfile.material}</strong> · Elasticidade {textileElasticityLabel[product.textileProfile.elasticity]}</p>{product.textileProfile.drape && <p>{product.textileProfile.drape}</p>}<small>Origem: {product.textileProfile.origin === "provided" ? "catálogo" : product.textileProfile.origin === "derived" ? "derivada do catálogo" : "descrição editorial demonstrativa"}</small></div>}
 
@@ -421,16 +430,17 @@ function ProductDetail({
                 {(["bust", "waist", "hip"] as const).map((metric) => {
                   const labels = { bust: "Busto", waist: "Cintura", hip: "Quadril" };
                   const required = requiredBodyMeasurements.includes(metric);
-                  const [min, max] = measurementLimits[metric]; const [guideMin, guideMax] = guideRange(metric);
+                  const [min, max] = measurementLimits[metric]; const [guideMin, guideMax] = guideRange(metric, activeSizeGuide);
                   const inputId = `measurement-${metric}`; const helperId = `${inputId}-help`; const errorId = `${inputId}-error`;
                   return <label key={metric} htmlFor={inputId} className={`${required ? "is-required" : ""} ${measurementErrors[metric] ? "has-error" : ""}`}><span>{labels[metric]} <em>{required ? "obrigatória" : "opcional"}</em></span><span className="measurement-input"><input id={inputId} name={metric} type="number" inputMode="decimal" autoComplete="off" min={min} max={max} step="0.5" value={measurementDraft[metric]} onChange={(event) => { setMeasurementDraft((current) => ({ ...current, [metric]: event.target.value })); setMeasurements({}); setMeasurementsSaved(false); setMeasurementErrors((current) => ({ ...current, [metric]: undefined })); }} onBlur={() => { if (!required && !measurementDraft[metric]) return; const error = measurementFieldError(metric, measurementDraft[metric] ? Number(measurementDraft[metric]) : undefined); setMeasurementErrors((current) => ({ ...current, [metric]: error })); }} aria-required={required} aria-invalid={Boolean(measurementErrors[metric])} aria-describedby={measurementErrors[metric] ? `${helperId} ${errorId}` : helperId}/><small>cm</small></span><small id={helperId} className="measurement-helper">Guia P–GG: {guideMin}–{guideMax} cm</small>{measurementErrors[metric] && <small id={errorId} className="measurement-field-error" role="alert">{measurementErrors[metric]}</small>}</label>;
                 })}
               </fieldset>
-              <details className="measurement-howto"><summary>Como medir corretamente</summary><ul><li><b>Busto:</b> passe a fita pela parte mais ampla, sem apertar.</li><li><b>Cintura:</b> meça a região mais estreita do tronco.</li><li><b>Quadril:</b> contorne a parte mais ampla mantendo a fita nivelada.</li></ul></details>
+              <details className="measurement-howto"><summary>Como medir corretamente</summary><div className="measurement-howto__content"><svg viewBox="0 0 150 220" role="img" aria-label="Ilustração com linhas de busto, cintura e quadril"><path d="M75 16c13 0 20 10 20 23 0 8-3 15-9 19 19 9 26 28 23 51-2 17 8 33 13 49H28c5-16 15-32 13-49-3-23 4-42 23-51-6-4-9-11-9-19 0-13 7-23 20-23Z"/><path className="measure-line" d="M39 80h72M35 112h80M29 154h92"/><text x="116" y="83">1</text><text x="120" y="115">2</text><text x="126" y="157">3</text></svg><ol><li><b>1 · Busto:</b> passe a fita pela parte mais ampla, sem apertar.</li><li><b>2 · Cintura:</b> meça a região mais estreita do tronco.</li><li><b>3 · Quadril:</b> contorne a parte mais ampla mantendo a fita nivelada.</li></ol></div></details>
               <fieldset className="fit-picker">
                 <legend>Seu tamanho habitual</legend>
                 <div>{(["P","M","G","GG"] as const).map((value) => <button type="button" key={value} aria-pressed={usualSize === value} className={usualSize === value ? "selected" : ""} onClick={() => setUsualSize(value)}>{value}</button>)}</div>
               </fieldset>
+              <label className="measurement-consent"><input type="checkbox" checked={rememberMeasurements} onChange={(event) => setRememberMeasurements(event.target.checked)}/><span><b>Lembrar minhas medidas neste dispositivo</b><small>Opcional. Você pode apagar o perfil a qualquer momento.</small></span></label>
               <fieldset className="fit-picker">
                 <legend>Como você gosta de vestir?</legend>
                 <div>{([["fitted","Mais ajustado"],["regular","Equilibrado"],["loose","Mais solto"]] as const).map(([value,label]) => <button type="button" key={value} aria-pressed={fitPreference === value} className={fitPreference === value ? "selected" : ""} onClick={() => setFitPreference(value)}>{label}</button>)}</div>
@@ -439,7 +449,7 @@ function ProductDetail({
               {!selected && <p className="measurement-prerequisite">Selecione um tamanho acima para a MIPO comparar sua escolha com o perfil informado.</p>}
               <button type="button" className="measurement-submit" onClick={() => void applyMeasurements()} disabled={evaluating || !selected}>{evaluating ? <><span>Analisando caimento…</span><span className="button-spinner" aria-hidden="true"/></> : <><span>Analisar medidas & caimento</span><Icon name="arrow"/></>}</button>
               <div className="measurement-secondary-actions"><button type="button" onClick={() => onOpenConcierge(product)}><Icon name="spark"/><span>Falar com a MIPO</span></button>{measurementsSaved && <button type="button" onClick={clearMeasurements}>Limpar medidas</button>}</div>
-              <p className="measurement-privacy">Privacidade: os valores ficam somente nesta sessão e não entram no pedido, painel ou histórico. Guia {VERTICE_SIZE_GUIDE.version} · referência demonstrativa.</p>
+              <p className="measurement-privacy">Privacidade: os valores ficam só nesta sessão, a menos que você autorize este dispositivo. Não entram no pedido, painel ou histórico. {activeSizeGuide.label} · {activeSizeGuide.version} · referência demonstrativa.</p>
             </div>
           </details>}
 
@@ -479,6 +489,7 @@ function ProductDetail({
                   <p>{result.evidence}</p>
                   <small>Regra determinística · score {result.score}/100 · cobertura de evidência {Math.round(result.evidenceCoverage * 100)}%</small>
                 </details>
+                {result.measurementAssessment && <section className="size-comparison" aria-label="Comparação de tamanhos"><header><b>Como cada tamanho tende a vestir</b><span>{result.measurementAssessment.guideLabel}</span></header><div>{result.measurementAssessment.sizeComparisons.map((item) => <article key={item.size} className={`${item.size === result.measurementAssessment?.recommendedSize ? "is-recommended" : ""} ${!item.available ? "is-unavailable" : ""}`}><strong>{item.size}</strong><span>{item.note}</span></article>)}</div>{result.measurementAssessment.limitingMeasurements.length > 0 && <p>Medida determinante: {result.measurementAssessment.limitingMeasurements.map((metric) => ({bust:"busto",waist:"cintura",hip:"quadril"})[metric]).join(" e ")}.</p>}</section>}
                 {result.measurementAssessment?.status === "out_of_range" && <div className="mipo-recovery"><p>Você ainda pode manter sua escolha. Para uma orientação mais precisa:</p><div><button type="button" onClick={() => measurementFieldsRef.current?.querySelector<HTMLInputElement>("input")?.focus()}>Revisar medidas</button><button type="button" className="quiet" onClick={() => onOpenConcierge(product)}>Conversar com a MIPO</button></div></div>}
                 {(result.recommendedVariant || result.alternativeProductId) && !decision && <div className="mipo-actions">
                   {result.recommendedVariant && <button type="button" disabled={decisionLoading} onClick={acceptRecommendation}>{decisionLoading ? "Aplicando tamanho…" : `Usar tamanho ${result.recommendedVariant.size}`}</button>}
@@ -909,6 +920,18 @@ function MipoAtelierDrawer({
   );
 }
 
+function FitFeedback({ items, persistent }: { items: Cart["items"]; persistent: boolean }) {
+  const apparel = items.filter((item) => item.size && ["P", "M", "G", "GG"].includes(item.size));
+  const [sent, setSent] = useState<Record<string, string>>({});
+  const [error, setError] = useState("");
+  if (!apparel.length) return null;
+  async function send(item: Cart["items"][number], rating: "tight" | "ideal" | "loose") {
+    try { if (persistent) await commerceApi.fitFeedback(item.productId, item.variantId, rating); setSent((current) => ({ ...current, [item.id]: rating })); setError(""); }
+    catch { setError("Não foi possível registrar agora. Tente novamente."); }
+  }
+  return <section className="fit-feedback"><p className="eyebrow">Aprendizado com consentimento</p><h2>Quando experimentar, conte como ficou</h2><p>Esse retorno melhora a grade e não inclui suas medidas.</p>{error && <p className="measurement-error" role="alert">{error}</p>}{apparel.map((item) => <article key={item.id}><div><b>{item.title}</b><span>Tamanho {item.size}</span></div>{sent[item.id] ? <strong className="fit-feedback__thanks">✓ Feedback registrado</strong> : <fieldset><legend>Como ficou?</legend>{([['tight', 'Apertado'], ['ideal', 'Ideal'], ['loose', 'Amplo']] as const).map(([value, label]) => <button key={value} type="button" onClick={() => void send(item, value)}>{label}</button>)}</fieldset>}</article>)}</section>;
+}
+
 export function Storefront() {
   const persistent = process.env.NEXT_PUBLIC_DATA_SOURCE === "supabase";
   const maxStorefrontProducts = 48;
@@ -921,6 +944,7 @@ export function Storefront() {
   const [catalogLoading, setCatalogLoading] = useState(persistent);
   const [pilotGroup, setPilotGroup] = useState<PilotGroup>("treatment");
   const [completedOrder, setCompletedOrder] = useState<PilotOrderResult | null>(null);
+  const [completedItems, setCompletedItems] = useState<Cart["items"]>([]);
   const [checkoutSubmitting, setCheckoutSubmitting] = useState(false);
   const [checkoutError, setCheckoutError] = useState("");
   const checkoutKey = useRef<string | undefined>(undefined);
@@ -955,6 +979,19 @@ export function Storefront() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, [view, activeProduct]);
 
+  useEffect(() => {
+    if (catalogLoading) return;
+    const restoreFromUrl = () => {
+      const handle = new URLSearchParams(window.location.search).get("produto");
+      const found = handle ? products.find((product) => product.handle === handle) : undefined;
+      if (found) { setActiveProduct(found); setConciergeProductContext(found); setView("product"); }
+      else if (view === "product") setView("catalog");
+    };
+    restoreFromUrl();
+    window.addEventListener("popstate", restoreFromUrl);
+    return () => window.removeEventListener("popstate", restoreFromUrl);
+  }, [catalogLoading, products]);
+
   const cartCount = useMemo(() => cart.items.reduce((sum, item) => sum + item.quantity, 0), [cart]);
 
   function openProduct(product: Product) {
@@ -962,6 +999,7 @@ export function Storefront() {
     setConciergeProductContext(product);
     setConciergeSuggestedSize(null);
     setView("product");
+    window.history.pushState({ product: product.handle }, "", `/?produto=${encodeURIComponent(product.handle)}`);
   }
 
   function handleOpenConcierge(product?: Product) {
@@ -1011,6 +1049,7 @@ export function Storefront() {
     setCheckoutSubmitting(true);
     setCheckoutError("");
     try {
+      setCompletedItems(cart.items);
       if (persistent) {
         checkoutKey.current ??= crypto.randomUUID();
         const order = await commerceApi.checkout(checkoutKey.current);
@@ -1054,7 +1093,7 @@ export function Storefront() {
         <ProductDetail
           product={activeProduct}
           persistent={persistent}
-          onBack={() => setView("catalog")}
+          onBack={() => { window.history.pushState({}, "", "/"); setView("catalog"); }}
           onAdded={add}
           onAlternative={(id) => {
             const found = products.find((p) => p.id === id);
@@ -1086,7 +1125,8 @@ export function Storefront() {
           <span className="success-mark">✓</span>
           <h1>Escolha registrada.<br /><em>Nenhuma compra foi realizada.</em></h1>
           <p>{completedOrder ? `Registro ${completedOrder.displayId} criado com ${completedOrder.itemCount} ${completedOrder.itemCount === 1 ? "item" : "itens"}.` : "A escolha demonstrativa foi concluída."} Nenhuma cobrança ou pedido comercial foi realizado.</p>
-          <button className="primary-action" onClick={() => setView("catalog")}>Voltar à coleção <Icon name="arrow" /></button>
+          <FitFeedback items={completedItems} persistent={persistent} />
+          <button className="primary-action" onClick={() => { window.history.pushState({}, "", "/"); setView("catalog"); }}>Voltar à coleção <Icon name="arrow" /></button>
         </main>
       )}
 

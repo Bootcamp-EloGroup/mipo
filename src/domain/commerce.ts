@@ -4,10 +4,18 @@ export type Size = "P" | "M" | "G" | "GG";
 export type BodyMeasurements = { bust?: number; waist?: number; hip?: number };
 export type MeasurementMetric = keyof BodyMeasurements;
 export type SizeGuide = {
+  productId?: string;
+  label: string;
   version: string;
   origin: "provided" | "derived" | "synthetic";
   unit: "cm";
   ranges: Record<Size, Partial<Record<MeasurementMetric, [number, number]>>>;
+};
+export type SizeComparison = {
+  size: Size;
+  fit: "fitted" | "balanced" | "roomy" | "outside";
+  available: boolean;
+  note: string;
 };
 export type MeasurementFitAssessment = {
   status: "recommended" | "between_sizes" | "out_of_range" | "insufficient_evidence";
@@ -21,6 +29,8 @@ export type MeasurementFitAssessment = {
   evidence: string;
   guideVersion: string;
   guideOrigin: SizeGuide["origin"];
+  guideLabel: string;
+  sizeComparisons: SizeComparison[];
 };
 export type ProductQuestion = {
   id: string;
