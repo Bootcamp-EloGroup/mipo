@@ -10,6 +10,7 @@ __pycache__/
 
 # Next.js
 .next/
+.vercel/
 node_modules/
 *.tsbuildinfo
 .env

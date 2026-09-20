@@ -12,6 +12,8 @@ include=["mipo_agent*"]
 mipo-eval="mipo_agent.evaluation.cli:main"
 [tool.uv]
 package=true
+[tool.vercel]
+entrypoint="mipo_agent.main:app"
 [dependency-groups]
 dev=["httpx>=0.28,<1","pytest>=8,<9"]
 [tool.pytest.ini_options]

@@ -43,6 +43,7 @@ As bases CSV não estão incluídas porque contêm identificadores e textos em n
 - [`docs/evidencias.md`](docs/evidencias.md) — relatório rastreável de evidências.
 - [`docs/roadmap.md`](docs/roadmap.md) — roadmap técnico em ordem de dependências.
 - [`docs/mvp.md`](docs/mvp.md) — definição funcional e técnica do MVP.
+- [`docs/deploy-vercel.md`](docs/deploy-vercel.md) — deploy completo da aplicação Next.js e do agente FastAPI na Vercel.
 
 ## E-commerce e Supabase
 
@@ -51,7 +52,17 @@ O storefront Vértice funciona em dois modos explícitos:
 - `DATA_SOURCE=local`: fixtures públicas para desenvolvimento visual.
 - `DATA_SOURCE=supabase`: catálogo, estoque, carrinho anônimo e decisões MIPO persistidos no projeto remoto.
 
-Não existe fallback silencioso entre os modos. O checkout permanece exclusivamente visual e não cria pedido ou cobrança.
+Não existe fallback silencioso entre os modos. O checkout não realiza cobrança comercial, mas registra pedidos demonstrativos idempotentes para rastrear o piloto.
+
+## Deploy na Vercel
+
+O repositório está preparado para dois projetos Vercel: a aplicação Next.js na raiz e o agente FastAPI com Root Directory `services/agent`. Publique o agente primeiro e configure sua URL HTTPS no projeto web. O roteiro completo, as variáveis por projeto, os smoke tests e o rollback estão em [`docs/deploy-vercel.md`](docs/deploy-vercel.md).
+
+Para executar a configuração guiada:
+
+```bash
+./scripts/setup-vercel.sh
+```
 
 ### Configuração do zero
 

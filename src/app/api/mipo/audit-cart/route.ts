@@ -3,6 +3,8 @@ import { apiError } from "@/src/lib/api-response";
 import { auditCart } from "@/src/server/mipo-assistant";
 import type { CartLine } from "@/src/domain/commerce";
 
+export const maxDuration = 60;
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();

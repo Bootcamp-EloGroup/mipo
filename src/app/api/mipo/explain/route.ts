@@ -7,6 +7,8 @@ import { evaluateCheckoutRisk, evaluateSelectionContext, type FitPreference, typ
 import type { SelectionContext, Size } from "@/src/domain/commerce";
 import type { AgentAnswer } from "@/src/domain/agent";
 
+export const maxDuration = 60;
+
 type Intervention = {
   id: string;
   session_id: string;

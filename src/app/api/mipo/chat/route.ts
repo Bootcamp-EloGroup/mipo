@@ -3,6 +3,8 @@ import { apiError } from "@/src/lib/api-response";
 import { chatWithMipo, type ChatMessage } from "@/src/server/mipo-assistant";
 import type { Product, CartLine } from "@/src/domain/commerce";
 
+export const maxDuration = 60;
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
