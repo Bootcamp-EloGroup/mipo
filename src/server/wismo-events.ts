@@ -8,10 +8,13 @@ import {
   isValidOrderCode,
   isWismoRating,
   normalizeOrderCode,
+  summarizeRatings,
   type WismoDashboardData,
   type WismoEvent,
   type WismoEventInput,
   type WismoRating,
+  type WismoRatingsQuery,
+  type WismoRatingsResponse,
   type WismoResolution,
   type WismoStatus,
 } from "@/src/domain/wismo-chat";
@@ -110,4 +113,10 @@ export async function getWismoDashboardData(): Promise<WismoDashboardData> {
     byStatus,
     recent: events.slice(0, RECENT_LIMIT).map(({ id, occurredAt, orderCode, status, outcome, escalationReason, dataOrigin, resolution, rating }) => ({ id, occurredAt, orderCode, status, outcome, escalationReason, dataOrigin, resolution, rating })),
   };
+}
+
+/** Notas e respostas de pendência dentro de uma janela de tempo (modo local; o Supabase depende da tabela de atendimentos). */
+export async function getWismoRatingsSummary(query: WismoRatingsQuery, now: Date = new Date()): Promise<WismoRatingsResponse> {
+  if (dataSource() !== "local") return { available: false, reason: UNAVAILABLE, ...summarizeRatings([], query, now) };
+  return { available: true, ...summarizeRatings([...localStore().values()], query, now) };
 }
