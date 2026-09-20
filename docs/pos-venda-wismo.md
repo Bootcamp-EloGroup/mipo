@@ -347,7 +347,7 @@ Reconstrói a classificação retrospectiva dos pedidos históricos. **Operaçã
 
 ## 5. Modelo de dados
 
-Migration: [`202609200001_wismo_logistics_sla.sql`](../supabase/migrations/202609200001_wismo_logistics_sla.sql). Todas as tabelas com RLS habilitada e sem policies — só `service_role` acessa, pelo padrão já usado no resto do projeto.
+Migration: [`202609200002_wismo_logistics_sla.sql`](../supabase/migrations/202609200002_wismo_logistics_sla.sql). Todas as tabelas com RLS habilitada e sem policies — só `service_role` acessa, pelo padrão já usado no resto do projeto.
 
 | Tabela | Papel |
 |---|---|
