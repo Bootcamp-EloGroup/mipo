@@ -1,3 +1,3 @@
-order_id,customer_id,sku_id,data_pedido,canal,categoria,produto,quantidade,preco_unitario,receita_liquida,status_pagamento,margem_contribuicao,devolvido,motivo_devolucao
-ORD-DEMO-001,CLI-ANON-001,SKU-DEMO-001,2026-08-01 10:00:00,Orgânico,Moda,Camisa Horizonte,1,299.90,299.90,Aprovado,121.50,False,Não se aplica
-ORD-DEMO-002,CLI-ANON-002,SKU-DEMO-002,2026-08-02 11:30:00,Orgânico,Moda,Camisa Horizonte,1,299.90,299.90,Aprovado,121.50,True,Tamanho errado
+order_id,customer_id,sku_id,data_pedido,canal,categoria,produto,quantidade,preco_unitario,receita_liquida,status_pagamento,margem_contribuicao,devolvido,motivo_devolucao,tempo_entrega_real
+ORD-DEMO-001,CLI-ANON-001,SKU-DEMO-001,2026-08-01 10:00:00,Orgânico,Moda,Camisa Horizonte,1,299.90,299.90,Aprovado,121.50,False,Não se aplica,6
+ORD-DEMO-002,CLI-ANON-002,SKU-DEMO-002,2026-08-02 11:30:00,Orgânico,Moda,Camisa Horizonte,1,299.90,299.90,Aprovado,121.50,True,Tamanho errado,14
