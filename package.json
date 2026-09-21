@@ -7,6 +7,7 @@
   },
   "scripts": {
     "dev": "next dev",
+    "dev:agent": "cd services/agent && .venv/bin/uvicorn mipo_agent.main:app --port 8002 --reload",
     "build": "next build",
     "start": "next start",
     "lint": "tsc --noEmit",

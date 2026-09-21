@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 from typing import Sequence
@@ -39,7 +40,8 @@ def _build_context(request: ChatRequest) -> str:
         "- Seja assertiva e concisa (2 a 3 parágrafos curtos).",
         "- Considere as propriedades reais dos tecidos (linho não estica, tricot se molda, casaco cocoon é amplo).",
         "- Se indicar um tamanho específico (P, M, G ou GG), inclua no texto: [SUGESTÃO: TAMANHO_<P|M|G|GG>].",
-        "- Se sugerir uma peça complementar para compor look, inclua: [SUGESTÃO: PRODUTO_<ID_DO_PRODUTO>].",
+        "- Se sugerir uma peça complementar ou destaque do catálogo, inclua: [SUGESTÃO: PRODUTO_<ID_DO_PRODUTO>].",
+        "- Se a cliente pedir recomendação geral sem selecionar um produto específico, apresente os pilares do atelier (Vestido Aurora, Calça Eixo, Blusa Trama ou Casaco Órbita) e sugira uma peça de entrada usando [SUGESTÃO: PRODUTO_prod_vestido_aurora].",
         "",
         "Catálogo Vértice:",
         CATALOG_KNOWLEDGE,
@@ -198,6 +200,40 @@ def _atelier_fallback(request: ChatRequest) -> ChatResponse:
         )
         return ChatResponse(reply=reply, provider="deterministic", model="atelier_rules")
 
+    if any(term in last_user_msg for term in ("recomen", "suger", "indica", "combinar", "combina", "look", "conjunto", "o que voce", "o que você")):
+        if request.productContext:
+            title = request.productContext.title
+            companions = {
+                "prod_vestido_aurora": ("Jaqueta Lume", "prod_jaqueta_lume", "A sobreposição em sarja açafrão equilibra a fluidez do linho terracota."),
+                "prod_vestido_sereno": ("Casaco Órbita", "prod_casaco_orbita", "O tricot borgonha envolvente compõe um contraste elegante com o algodão marinho."),
+                "prod_blusa_trama": ("Calça Eixo", "prod_calca_eixo", "A alfaiataria oliva com a trama artesanal em areia cria proporção impecável."),
+                "prod_calca_eixo": ("Blusa Trama", "prod_blusa_trama", "O tricot solto em areia equilibra a estrutura das pregas frontais."),
+                "prod_jaqueta_lume": ("Vestido Sereno", "prod_vestido_sereno", "A sarja utilitária ganha sofisticação sobre o algodão minimalista."),
+                "prod_casaco_orbita": ("Vestido Aurora", "prod_vestido_aurora", "O cocoon borgonha sobre o linho terracota é a assinatura do atelier."),
+            }
+            product_id = request.productContext.id
+            comp = companions.get(product_id)
+            if comp:
+                comp_name, comp_id, reason = comp
+                return ChatResponse(
+                    reply=f"Com o {title}, a combinação que mais recomendo é a {comp_name}. {reason}",
+                    suggestedAction=SuggestedAction(type="view_product", productId=comp_id, label=f"Ver {comp_name}"),
+                    provider="deterministic",
+                    model="atelier_rules",
+                )
+        # Generic recommendation without product context
+        reply = (
+            "Minhas recomendações para esta estação: o Vestido Aurora em linho terracota é a estrela do atelier — "
+            "combine com a Jaqueta Lume em açafrão para um look sofisticado. "
+            "Para o dia a dia, a Blusa Trama em tricot areia com a Calça Eixo em oliva é uma composição versátil e elegante."
+        )
+        return ChatResponse(
+            reply=reply,
+            suggestedAction=SuggestedAction(type="view_product", productId="prod_vestido_aurora", label="Ver Vestido Aurora"),
+            provider="deterministic",
+            model="atelier_rules",
+        )
+
     reply = (
         "No atelier Vértice, priorizamos matérias-primas puras como linho solar, tricot em algodão ecológico "
         "e lã fria. Como posso ajudar com seu caimento, medidas ou combinação de peças hoje?"
@@ -230,10 +266,24 @@ def handle_concierge_chat(request: ChatRequest) -> ChatResponse:
                 max_retries=0,
             )
 
-            # Build messages for LLM
-            llm_messages = [{"role": "system", "content": context_instruction}]
+            # Build messages for LLM — use LangChain message objects.
+            # We provide SystemMessage for standard LLMs, and also prepend
+            # the context to the first HumanMessage to ensure strict persona adherence
+            # on proxies or models that strip/ignore the system role.
+            from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+
+            llm_messages: list = [SystemMessage(content=context_instruction)]
+            user_seen = False
             for m in request.messages[-6:]:
-                llm_messages.append({"role": m.role, "content": m.content})
+                if m.role == "user":
+                    if not user_seen:
+                        user_seen = True
+                        content = f"{context_instruction}\n\n[MENSAGEM DA CLIENTE]:\n{m.content}"
+                    else:
+                        content = m.content
+                    llm_messages.append(HumanMessage(content=content))
+                else:
+                    llm_messages.append(AIMessage(content=m.content))
 
             response = llm.invoke(llm_messages)
             raw_reply = response.content if isinstance(response.content, str) else str(response.content)
@@ -246,7 +296,10 @@ def handle_concierge_chat(request: ChatRequest) -> ChatResponse:
                 provider=provider,  # type: ignore[arg-type]
                 model=model,
             )
-        except Exception:
+        except Exception as exc:
+            logging.getLogger("mipo_agent.concierge").warning(
+                "LLM provider '%s' failed: %s", provider, exc
+            )
             continue
 
     return _atelier_fallback(request)

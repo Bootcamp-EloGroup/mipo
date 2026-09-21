@@ -3,6 +3,17 @@ import hmac
 import logging
 import os
 import time
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# Load .env and .env.local from the monorepo root so the agent inherits
+# API keys (ELOAGENTS, GROQ, SUPABASE, etc.) that Next.js loads natively.
+# Skip loading during pytest to keep unit test suites deterministic and offline.
+if "PYTEST_CURRENT_TEST" not in os.environ and "PYTEST_VERSION" not in os.environ:
+    _project_root = Path(__file__).resolve().parents[3]  # mipo_agent/ → agent/ → services/ → root
+    load_dotenv(_project_root / ".env", override=False)
+    load_dotenv(_project_root / ".env.local", override=False)
 
 from fastapi import FastAPI, Header, HTTPException, Response
 
