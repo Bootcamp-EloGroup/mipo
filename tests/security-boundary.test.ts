@@ -49,3 +49,11 @@ describe("fronteira de dados da régua logística", () => {
     expect(readFileSync("tests/importer.test.ts", "utf8")).not.toContain("clientes.csv");
   });
 });
+
+describe("fronteira de dados dos atendimentos WISMO", () => {
+  it("mantém eventos restritos à service role", () => {
+    const sql = readFileSync("supabase/migrations/202609200004_wismo_service_events.sql", "utf8");
+    expect(sql).toContain("alter table public.wismo_service_events enable row level security");
+    expect(sql).toContain("revoke all on public.wismo_service_events from anon, authenticated");
+  });
+});

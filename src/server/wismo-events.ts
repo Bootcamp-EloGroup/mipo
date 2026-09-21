@@ -2,7 +2,6 @@ import "server-only";
 import {
   WISMO_RESOLUTIONS,
   WISMO_STATUSES,
-  emptyWismoDashboard,
   isValidOrderCode,
   isWismoRating,
   normalizeOrderCode,
@@ -16,19 +15,33 @@ import {
   type WismoResolution,
   type WismoStatus,
 } from "@/src/domain/wismo-chat";
-import { DataSourceUnavailableError, dataSource } from "@/src/lib/supabase-rest";
+import { dataSource, supabaseRest } from "@/src/lib/supabase-rest";
 import { getActiveWismoRuleSet, getLatestCompletedRunId, getOrderByKey, getRulerMatrix } from "@/src/server/wismo";
 import { evaluateDeliveryStatus } from "@/src/services/wismo";
 
 export class WismoEventNotFoundError extends Error {}
 
 type StoredEvent = WismoEvent & { sessionId: string };
+type DbEvent = {
+  id: string;
+  session_id: string;
+  order_code: string;
+  request_human: boolean;
+  status: WismoStatus;
+  outcome: WismoEvent["outcome"];
+  escalation_reason: string | null;
+  data_origin: WismoEvent["dataOrigin"];
+  resolution: WismoResolution | null;
+  rating: WismoRating | null;
+  occurred_at: string;
+  updated_at: string;
+};
 type Parsed = { ok: true; value: WismoEventInput } | { ok: false; error: string };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_EVENTS = 500;
+const SUPABASE_READ_LIMIT = 5000;
 const RECENT_LIMIT = 20;
-const UNAVAILABLE = "O registro de atendimentos WISMO no Supabase depende de uma tabela de atendimentos que ainda não existe (a combinar com a Frente 1) e não foi habilitado.";
 
 /** Armazenamento em memória do modo local, compartilhado entre as rotas do mesmo processo. */
 const holder = globalThis as typeof globalThis & { __mipoWismoEvents?: Map<string, StoredEvent> };
@@ -69,7 +82,35 @@ export function parseWismoEventInput(body: unknown): Parsed {
 }
 
 export async function recordWismoEvent(sessionId: string, input: WismoEventInput, now: Date = new Date()): Promise<void> {
-  if (dataSource() !== "local") throw new DataSourceUnavailableError(UNAVAILABLE);
+  const timestamp = now.toISOString();
+  const authoritative = await resolveWismoEvent(input.orderCode, input.requestHuman === true, now);
+  if (dataSource() === "supabase") {
+    const existing = (await supabaseRest<DbEvent[]>(`wismo_service_events?id=eq.${encodeURIComponent(input.id)}&select=*&limit=1`))[0];
+    if (existing && (existing.session_id !== sessionId || existing.order_code !== input.orderCode)) {
+      throw new WismoEventNotFoundError("Atendimento não encontrado para esta sessão.");
+    }
+    const resolution = input.resolution ?? existing?.resolution ?? null;
+    const rating = input.rating ?? existing?.rating ?? null;
+    await supabaseRest("wismo_service_events?on_conflict=id", {
+      method: "POST",
+      headers: { Prefer: "return=minimal,resolution=merge-duplicates" },
+      body: JSON.stringify({
+        id: input.id,
+        session_id: sessionId,
+        order_code: input.orderCode,
+        request_human: input.requestHuman === true,
+        status: authoritative.status,
+        outcome: authoritative.outcome,
+        escalation_reason: authoritative.escalationReason ?? null,
+        data_origin: authoritative.dataOrigin,
+        resolution,
+        rating,
+        occurred_at: existing?.occurred_at ?? timestamp,
+        updated_at: timestamp,
+      }),
+    });
+    return;
+  }
   const store = localStore();
   const existing = store.get(input.id);
   if (existing && existing.sessionId !== sessionId) throw new WismoEventNotFoundError("Atendimento não encontrado para esta sessão.");
@@ -77,8 +118,6 @@ export async function recordWismoEvent(sessionId: string, input: WismoEventInput
     const oldest = store.keys().next().value;
     if (oldest !== undefined) store.delete(oldest);
   }
-  const timestamp = now.toISOString();
-  const authoritative = await resolveWismoEvent(input.orderCode, input.requestHuman === true, now);
   // Reenvios do mesmo atendimento sem resposta/nota não apagam o que o cliente já respondeu.
   const resolution = input.resolution ?? existing?.resolution;
   const rating = input.rating ?? existing?.rating;
@@ -103,8 +142,13 @@ async function resolveWismoEvent(orderCode: string, requestHuman: boolean, now: 
 }
 
 export async function getWismoDashboardData(): Promise<WismoDashboardData> {
-  if (dataSource() !== "local") return emptyWismoDashboard(UNAVAILABLE);
-  const events = [...localStore().values()].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
+  const events = dataSource() === "local"
+    ? [...localStore().values()].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
+    : (await supabaseRest<DbEvent[]>(`wismo_service_events?select=*&order=occurred_at.desc&limit=${SUPABASE_READ_LIMIT}`)).map(fromDbEvent);
+  return summarizeDashboard(events);
+}
+
+function summarizeDashboard(events: WismoEvent[]): WismoDashboardData {
   const count = (outcome: WismoEvent["outcome"]) => events.filter((event) => event.outcome === outcome).length;
   const resolved = count("resolved");
   const escalated = count("escalated");
@@ -126,8 +170,26 @@ export async function getWismoDashboardData(): Promise<WismoDashboardData> {
   };
 }
 
-/** Notas e respostas de pendência dentro de uma janela de tempo (modo local; o Supabase depende da tabela de atendimentos). */
+/** Notas e respostas de pendência dentro de uma janela de tempo. */
 export async function getWismoRatingsSummary(query: WismoRatingsQuery, now: Date = new Date()): Promise<WismoRatingsResponse> {
-  if (dataSource() !== "local") return { available: false, reason: UNAVAILABLE, ...summarizeRatings([], query, now) };
-  return { available: true, ...summarizeRatings([...localStore().values()], query, now) };
+  const events = dataSource() === "local"
+    ? [...localStore().values()]
+    : (await supabaseRest<DbEvent[]>(`wismo_service_events?select=*&order=occurred_at.desc&limit=${SUPABASE_READ_LIMIT}`)).map(fromDbEvent);
+  return { available: true, ...summarizeRatings(events, query, now) };
+}
+
+function fromDbEvent(row: DbEvent): WismoEvent {
+  return {
+    id: row.id,
+    orderCode: row.order_code,
+    ...(row.request_human ? { requestHuman: true } : {}),
+    status: row.status,
+    outcome: row.outcome,
+    ...(row.escalation_reason ? { escalationReason: row.escalation_reason } : {}),
+    dataOrigin: row.data_origin,
+    ...(row.resolution ? { resolution: row.resolution } : {}),
+    ...(row.rating ? { rating: row.rating } : {}),
+    occurredAt: row.occurred_at,
+    updatedAt: row.updated_at,
+  };
 }

@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { DataSourceUnavailableError } from "../src/lib/supabase-rest";
 import { WismoEventNotFoundError, getWismoDashboardData, parseWismoEventInput, recordWismoEvent } from "../src/server/wismo-events";
 
 const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -56,11 +55,4 @@ describe("registro local de atendimentos", () => {
     expect((await getWismoDashboardData()).total).toBe(500);
   });
 
-  it("não simula persistência no modo supabase", async () => {
-    process.env.DATA_SOURCE = "supabase";
-    await expect(recordWismoEvent("s1", { id: uuid(1), orderCode: "ORD-DEMO-001" })).rejects.toBeInstanceOf(DataSourceUnavailableError);
-    const data = await getWismoDashboardData();
-    expect(data.available).toBe(false);
-    expect(data.reason).toContain("tabela de atendimentos");
-  });
 });

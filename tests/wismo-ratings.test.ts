@@ -81,10 +81,17 @@ describe("getWismoRatingsSummary", () => {
     expect(all).toMatchObject({ available: true, ratedCount: 2, averageRating: 3.5, feedbackPending: 1 });
   });
 
-  it("não simula dados no modo supabase", async () => {
+  it("lê avaliações persistidas no modo supabase sem inventar dados", async () => {
     process.env.DATA_SOURCE = "supabase";
+    process.env.SUPABASE_URL = "https://example.supabase.co";
+    process.env.SUPABASE_SECRET_KEY = "test-secret";
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => new Response("[]", { status: 200 });
     const data = await getWismoRatingsSummary({ range: "7d" }, NOW);
-    expect(data.available).toBe(false);
+    expect(data.available).toBe(true);
     expect(data.ratedCount).toBe(0);
+    globalThis.fetch = originalFetch;
+    delete process.env.SUPABASE_URL;
+    delete process.env.SUPABASE_SECRET_KEY;
   });
 });

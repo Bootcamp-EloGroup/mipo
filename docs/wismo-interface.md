@@ -37,12 +37,11 @@ Para demonstrar sem dados (ou sem banco), defina `NEXT_PUBLIC_WISMO_SOURCE=mock`
 
 ## Registro de atendimentos
 
-`POST /api/wismo/events` recebe `WismoEventInput` (`id` UUID, `orderCode`, `status`, `outcome`, `escalationReason?`, `dataOrigin`). O mesmo `id` atualiza o atendimento (ex.: cliente pede atendimento humano depois de receber a resposta). Desfechos: `resolved | escalated | not_found`.
+`POST /api/wismo/events` recebe somente os dados controlados pelo cliente: `id` UUID, `orderCode`, `requestHuman?`, `resolution?` e `rating?`. Status, desfecho, motivo de escalonamento e origem são recalculados no servidor. O mesmo `id` atualiza o atendimento sem permitir que outra sessão assuma o registro.
 
 - `DATA_SOURCE=local`: guarda em memória do processo (até 500 eventos), útil para demo e testes.
-- `DATA_SOURCE=supabase`: responde indisponível de forma explícita até existir uma tabela de atendimentos (ainda não existe; combinar com a Frente 1). Não há simulação de persistência.
-
-Pontos a alinhar na integração: definir a tabela de atendimentos e mapear `WismoEvent` para ela; o servidor deve **recalcular** o status a partir do pedido em vez de confiar no status enviado pelo cliente.
+- `DATA_SOURCE=supabase`: persiste em `wismo_service_events`, protegida por RLS e sem acesso para `anon` ou `authenticated`; as rotas de servidor usam exclusivamente a service role.
+- O painel e o resumo de avaliações leem até os 5.000 eventos mais recentes. Códigos de pedido são mascarados antes de sair do servidor.
 
 ## Simulador de impacto
 
