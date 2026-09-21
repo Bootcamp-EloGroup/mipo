@@ -38,7 +38,7 @@ describe("fronteira de segurança do Supabase", () => {
 describe("fronteira de dados da régua logística", () => {
   it("mantém o mapa de UFs sincronizado com a migration", () => {
     const states = JSON.parse(readFileSync("src/data/brazilian-states.json", "utf8")) as Array<{uf:string;name:string;region:string}>;
-    const sql = readFileSync("supabase/migrations/202609200002_wismo_logistics_sla.sql", "utf8");
+    const sql = readFileSync("supabase/migrations/202609200004_wismo_logistics_sla.sql", "utf8");
     expect(states).toHaveLength(27);
     for (const state of states) expect(sql).toContain(`('${state.uf}','${state.name}','${state.region}')`);
   });
@@ -52,7 +52,7 @@ describe("fronteira de dados da régua logística", () => {
 
 describe("fronteira de dados dos atendimentos WISMO", () => {
   it("mantém eventos restritos à service role", () => {
-    const sql = readFileSync("supabase/migrations/202609200004_wismo_service_events.sql", "utf8");
+    const sql = readFileSync("supabase/migrations/202609200005_wismo_service_events.sql", "utf8");
     expect(sql).toContain("alter table public.wismo_service_events enable row level security");
     expect(sql).toContain("revoke all on public.wismo_service_events from anon, authenticated");
   });
