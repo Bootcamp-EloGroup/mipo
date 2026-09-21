@@ -2,6 +2,12 @@
 
 Aplicação full stack criada para o case Vértice/EloGroup. O MIPO transforma sinais de vendas, estoque, devoluções, atendimento e logística em intervenções acionáveis antes e depois da compra, com decisões determinísticas, explicações assistidas por IA e rastreabilidade operacional.
 
+## Integrantes
+
+- [Christian Santos](https://www.linkedin.com/in/christian-gandra/)
+- [Juliana Mota](https://www.linkedin.com/in/juliana-mota-11456b238/)
+- [Yasmim Mattos](https://www.linkedin.com/in/yasmim-zeferino-37ba33355/)
+
 ## Contexto do projeto
 
 A análise do case identificou duas fontes relevantes de perda de margem e atrito na jornada:
@@ -234,9 +240,3 @@ Publique primeiro o agente, valide `/health` e `/ready`, e depois configure sua 
 - [`docs/roteiro-demonstracao.md`](docs/roteiro-demonstracao.md) — roteiro da demonstração;
 - [`docs/roadmap.md`](docs/roadmap.md) — evolução técnica planejada;
 - [`entregáveis/`](entregáveis/) — materiais finais do case.
-
-## Integrantes
-
-- [Christian Santos](https://www.linkedin.com/in/christian-gandra/)
-- [Juliana Mota](https://www.linkedin.com/in/juliana-mota-11456b238/)
-- [Yasmim Mattos](https://www.linkedin.com/in/yasmim-zeferino-37ba33355/)
