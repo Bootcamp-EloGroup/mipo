@@ -15,6 +15,7 @@ import {
 import "./wismo-badge.css";
 import { MOCK_ORDER_EXAMPLES } from "@/src/services/wismo-mock";
 import { WISMO_MOCK_ENABLED, wismoApi } from "@/src/services/wismo-api";
+import { extractOrderCode } from "@/src/domain/wismo-help";
 
 type ThreadItem =
   | { id: number; role: "user"; text: string }
@@ -125,10 +126,11 @@ function Bubble({ item, escalated, record, feedback, onRequestHuman, onResolutio
 
 export function WismoChat() {
   const [items, setItems] = useState<ThreadItem[]>([
-    { id: 0, role: "assistant", kind: "greeting", text: "Olá! Eu acompanho pedidos da Vértice. Informe o código do seu pedido e eu confiro o status da entrega." },
+    { id: 0, role: "assistant", kind: "greeting", text: "Olá! Posso tirar dúvidas sobre o pós-compra ou acompanhar uma entrega. Para consultar um pedido específico, envie o código; para dúvidas gerais, é só perguntar." },
   ]);
-  const [code, setCode] = useState("");
+  const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadingMode, setLoadingMode] = useState<"order" | "help">("help");
   const [formError, setFormError] = useState("");
   const [escalated, setEscalated] = useState<Record<string, true>>({});
   const [records, setRecords] = useState<Record<string, RecordState>>({});
@@ -172,8 +174,9 @@ export function WismoChat() {
     }
   }
 
-  async function lookup(raw: string) {
+  async function lookup(raw: string, userText?: string) {
     if (loading) return;
+    setLoadingMode("order");
     const orderCode = normalizeOrderCode(raw);
     if (!isValidOrderCode(orderCode)) {
       setFormError("Informe o código do pedido com 3 a 32 letras, números ou hífens.");
@@ -181,8 +184,8 @@ export function WismoChat() {
     }
     setFormError("");
     setLoading(true);
-    setCode("");
-    push({ role: "user", text: `Onde está o pedido ${orderCode}?` });
+    setMessage("");
+    push({ role: "user", text: userText ?? `Onde está o pedido ${orderCode}?` });
     try {
       const [result] = await Promise.all([wismoApi.status(orderCode), pause(700)]);
       const interactionId = newId();
@@ -190,7 +193,35 @@ export function WismoChat() {
       void record(interactionId, result);
       if (outcomeFor(result) === "resolved") void askResolution(interactionId, result);
     } catch (error) {
-      push({ role: "assistant", kind: "notice", text: error instanceof Error ? `Não consegui consultar o pedido agora. ${error.message}` : "Não consegui consultar o pedido agora. Tente novamente em instantes." });
+      push({ role: "assistant", kind: "notice", text: "Não consegui consultar esse pedido agora. Tente novamente em instantes ou faça uma dúvida geral sem informar dados pessoais." });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function send(raw: string) {
+    if (loading) return;
+    const text = raw.trim();
+    if (text.length < 2) {
+      setFormError("Digite uma dúvida ou informe o código do pedido.");
+      return;
+    }
+    const orderCode = extractOrderCode(text);
+    if (orderCode) {
+      setLoadingMode("order");
+      await lookup(orderCode, text);
+      return;
+    }
+    setFormError("");
+    setLoadingMode("help");
+    setLoading(true);
+    setMessage("");
+    push({ role: "user", text });
+    try {
+      const [answer] = await Promise.all([wismoApi.help(text), pause(450)]);
+      push({ role: "assistant", kind: "notice", text: answer.reply });
+    } catch {
+      push({ role: "assistant", kind: "notice", text: "Não consegui responder agora. Você pode tentar novamente ou enviar o código se a dúvida for sobre uma entrega específica." });
     } finally {
       setLoading(false);
     }
@@ -254,32 +285,38 @@ export function WismoChat() {
             <div className="mipo-bubble-meta">Assistente de pedidos</div>
             <div className="mipo-bubble-body mipo-bubble-body--thinking">
               <div className="mipo-typing-dots" aria-hidden="true"><span /><span /><span /></div>
-              <p className="mipo-thinking-text" role="status">Consultando o rastreamento do pedido…</p>
+              <p className="mipo-thinking-text" role="status">{loadingMode === "order" ? "Consultando o rastreamento do pedido…" : "Preparando uma orientação segura…"}</p>
             </div>
           </div>
         )}
         <div ref={threadEnd} />
       </div>
 
-      <form className="wismo-form" onSubmit={(event) => { event.preventDefault(); void lookup(code); }} noValidate>
-        <label htmlFor="wismo-order">Código do pedido</label>
+      <form className="wismo-form" onSubmit={(event) => { event.preventDefault(); void send(message); }} noValidate>
+        <label htmlFor="wismo-message">Converse com o assistente</label>
+        <p className="wismo-form__hint">Pergunte livremente. O código só é necessário para consultar um pedido específico.</p>
         <div className="wismo-form__row">
           <input
-            id="wismo-order"
-            name="order"
-            value={code}
-            onChange={(event) => setCode(event.target.value)}
-            maxLength={32}
+            id="wismo-message"
+            name="message"
+            value={message}
+            onChange={(event) => setMessage(event.target.value)}
+            maxLength={500}
             autoComplete="off"
-            spellCheck={false}
-            placeholder="Ex.: ORD-1001…"
+            placeholder="Ex.: Qual é o prazo? ou Onde está o pedido ORD-1001?"
             aria-invalid={formError ? true : undefined}
-            aria-describedby={formError ? "wismo-order-error" : undefined}
+            aria-describedby={formError ? "wismo-message-error" : "wismo-message-hint"}
             disabled={loading}
           />
-          <button type="submit" className="mipo-chat-send" disabled={loading || !code.trim()}>Consultar</button>
+          <button type="submit" className="mipo-chat-send" disabled={loading || !message.trim()}>Enviar</button>
         </div>
-        {formError && <p id="wismo-order-error" className="wismo-form__error" role="alert">{formError}</p>}
+        <span id="wismo-message-hint" className="sr-only">Você pode enviar uma dúvida geral ou um código de pedido.</span>
+        {formError && <p id="wismo-message-error" className="wismo-form__error" role="alert">{formError}</p>}
+        <div className="wismo-suggestions" aria-label="Perguntas sugeridas">
+          {["Onde encontro meu código?", "Qual é o prazo de entrega?", "Posso alterar o endereço?", "Como falar com o atendimento?"].map((suggestion) => (
+            <button key={suggestion} type="button" disabled={loading} onClick={() => void send(suggestion)}>{suggestion}</button>
+          ))}
+        </div>
         {WISMO_MOCK_ENABLED && (
           <div className="wismo-examples">
             <span>Exemplos de demonstração:</span>

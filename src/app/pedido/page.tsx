@@ -4,7 +4,7 @@ import "./pedido.css";
 
 export const metadata: Metadata = {
   title: "Onde está meu pedido? — Vértice",
-  description: "Consulte o status do seu pedido com o assistente WISMO da Vértice (demonstração).",
+  description: "Tire dúvidas sobre o pós-compra e consulte o status do seu pedido com o assistente WISMO da Vértice.",
 };
 
 export default function OrderPage() {
@@ -19,11 +19,11 @@ export default function OrderPage() {
       <main id="pedido-conteudo" className="order-page">
         <section className="order-intro">
           <p className="eyebrow">Pós-compra · acompanhamento</p>
-          <h1>Onde está <em>meu pedido?</em></h1>
-          <p>Digite o código do pedido e o assistente confere o status, o último evento e a previsão de entrega. Se algo fugir do esperado, o caso segue para o atendimento com todo o contexto.</p>
+          <h1>Como podemos <em>ajudar?</em></h1>
+          <p>Converse sobre entrega, prazo, rastreamento, endereço ou troca. Para consultar status, último evento e previsão de uma compra específica, basta enviar o código do pedido durante a conversa.</p>
         </section>
         <WismoChat />
-        <p className="order-note">O assistente informa somente o que consta no rastreamento e nunca altera o pedido. Casos sem atualização ou inconclusivos são escalados para uma pessoa.</p>
+        <p className="order-note">O assistente não altera pedidos nem inventa dados de rastreamento. Consultas específicas exigem o código; casos críticos seguem para uma pessoa.</p>
       </main>
     </>
   );

@@ -32,13 +32,17 @@
 
 .wismo-form{padding:18px 24px 22px;border-top:1px solid var(--line);background:rgba(251,250,247,.98)}
 .wismo-form>label{display:block;margin-bottom:8px;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.wismo-form__hint{margin:-2px 0 12px;color:var(--muted);font-size:11px}
 .wismo-form__row{display:flex;gap:10px}
-.wismo-form input{flex:1;min-width:0;min-height:48px;padding:0 14px;border:1px solid var(--line);border-radius:8px;background:white;color:var(--ink);font-size:14px;text-transform:uppercase}
-.wismo-form input::placeholder{text-transform:none}
+.wismo-form input{flex:1;min-width:0;min-height:50px;padding:0 14px;border:1px solid var(--line);border-radius:8px;background:white;color:var(--ink);font-size:14px}
 .wismo-form input:focus{border-color:var(--ink)}
 .wismo-form input:disabled{opacity:.6}
 .wismo-form .mipo-chat-send{min-height:48px}
 .wismo-form__error{margin:8px 0 0;color:var(--rust);font-size:11px;font-weight:700}
+.wismo-suggestions{display:flex;gap:8px;overflow-x:auto;margin-top:14px;padding-bottom:3px;scrollbar-width:thin}
+.wismo-suggestions button{min-height:38px;flex:0 0 auto;padding:0 13px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--muted);cursor:pointer;font-size:10px;transition:background-color .2s ease,border-color .2s ease,color .2s ease}
+.wismo-suggestions button:hover:not(:disabled){border-color:var(--olive);background:#f0f3eb;color:var(--ink)}
+.wismo-suggestions button:disabled{opacity:.5;cursor:not-allowed}
 .wismo-examples{margin-top:14px;color:var(--muted);font-size:10px}
 .wismo-examples .mipo-chat-chips{padding:8px 0 0}
 

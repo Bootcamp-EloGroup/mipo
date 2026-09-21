@@ -2,6 +2,7 @@ import { summarizeRatings, type WismoDashboardData, type WismoEventInput, type W
 import { WISMO_SAMPLE_DASHBOARD, sampleRatedEvents } from "@/src/domain/wismo-sample";
 import { fromEngineResponse, notFoundResponse, type EngineOrderResponse } from "@/src/services/wismo-adapter";
 import { mockWismoStatus } from "@/src/services/wismo-mock";
+import type { WismoHelpAnswer } from "@/src/domain/wismo-help";
 
 /**
  * Enquanto a consulta real de pedidos (Frente 1) não estiver integrada, defina
@@ -37,6 +38,8 @@ export const wismoApi = {
     WISMO_MOCK_ENABLED ? Promise.resolve(mockWismoStatus(orderCode)) : engineStatus(orderCode),
   record: (event: WismoEventInput) =>
     request<{ recorded: boolean }>("/api/wismo/events", { method: "POST", body: JSON.stringify(event) }),
+  help: (message: string) =>
+    request<WismoHelpAnswer>("/api/wismo/help", { method: "POST", body: JSON.stringify({ message }) }),
   ratings: (query: WismoRatingsQuery): Promise<WismoRatingsResponse> => {
     if (previewSample()) return Promise.resolve({ available: true, sample: true, ...summarizeRatings(sampleRatedEvents(), query) });
     const params = "range" in query ? `range=${query.range}` : `from=${encodeURIComponent(query.from)}&to=${encodeURIComponent(query.to)}`;
