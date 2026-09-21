@@ -1,80 +1,136 @@
-# Análises de dados — case Vértice / MIPO
+# MIPO — Motor Inteligente de Priorização Operacional
 
-Esta pasta reúne as análises que fundamentaram o **MIPO (Motor Inteligente de Priorização Operacional)**.
+Aplicação full stack criada para o case Vértice/EloGroup. O MIPO transforma sinais de vendas, estoque, devoluções, atendimento e logística em intervenções acionáveis antes e depois da compra, com decisões determinísticas, explicações assistidas por IA e rastreabilidade operacional.
 
-## Escopo executável atual
+## Contexto do projeto
 
-O produto executável está concentrado na jornada **pré-compra**: avaliação
-determinística de produto/tamanho, explicação controlada, decisão do cliente,
-auditoria e painel. O concierge de moda e a auditoria de sacola são capacidades
-experimentais de demonstração e não substituem o núcleo determinístico.
+A análise do case identificou duas fontes relevantes de perda de margem e atrito na jornada:
 
-O fluxo pós-compra **WISMO permanece no backlog**. Os números históricos de
-atendimento sustentam sua prioridade futura, mas a aplicação ainda não consulta
-pedido/tracking, não responde prazo e não registra resolução ou escalonamento WISMO.
+- devoluções evitáveis, especialmente por tamanho incorreto, expectativa e defeito;
+- contatos WISMO (*Where Is My Order?*), que representam dúvidas recorrentes sobre status e prazo de entrega.
 
-## Ordem de leitura
+O experimento de previsão de devolução obteve ROC-AUC de 0,497. Por isso, o MVP não delega decisões críticas a um modelo preditivo: regras auditáveis calculam risco, recomendação e elegibilidade, enquanto a IA generativa apenas explica resultados autorizados.
 
-1. [`analises/01_exploracao_inicial.ipynb`](analises/01_exploracao_inicial.ipynb) — exploração inicial das frentes de vendas, margem, devoluções, atendimento, estoque e clientes.
-2. [`analises/02_validacao_metodologica.ipynb`](analises/02_validacao_metodologica.ipynb) — revisão de qualidade, robustez, limitações e viabilidade de modelos.
-3. [`analises/03_margem_e_issue_tree.ipynb`](analises/03_margem_e_issue_tree.ipynb) — investigação focada em margem, priorização e issue tree.
+## Solução
 
-## Síntese dos resultados
+O produto cobre quatro frentes integradas:
 
-- 24.454 pedidos aprovados válidos e 3.639 devoluções: taxa observada de 14,88%.
-- Defeito e tamanho errado somam 1.830 ocorrências, ou 50,29% das devoluções.
-- WISMO representa 10.765 tickets, ou 30,04% do atendimento válido.
-- O experimento temporal de risco de devolução obteve ROC-AUC 0,497; portanto, ML é **NO-GO** para o MVP.
-- Estoque é um retrato pontual. Valores associados a SKUs críticos representam exposição, não perda histórica comprovada.
+1. **Loja e checkout assistido:** catálogo, carrinho e avaliação de risco por produto/variante, com recomendação de tamanho ou alternativa antes da compra.
+2. **Pós-compra WISMO:** em `/pedido`, o cliente pode consultar um pedido com código ou conversar sem código para tirar dúvidas gerais. O motor consolida status, prazo, último evento e necessidade de escalonamento.
+3. **Painel de gestão:** em `/painel`, indicadores agregados apoiam o acompanhamento de margem, estoque, intervenções, aceite, devoluções, WISMO e cenários de impacto.
+4. **Agente governado:** um runtime FastAPI/LangGraph usa ferramentas com contrato restrito para explicar evidências. Ele não altera risco, estoque, variante ou ações definidas pelo motor determinístico.
 
-## Limites de interpretação
-
-- Valores financeiros são históricos ou estimados; não representam economia capturada pelo MIPO.
-- Associação estatística não demonstra causalidade.
-- A base de estoque não é uma série temporal.
-- A IA generativa pode explicar evidências, mas regras e cálculos determinísticos sustentam decisões.
-
-## Dados
-
-As bases CSV não estão incluídas porque contêm identificadores e textos em nível de cliente/pedido. Consulte [`data/README.md`](data/README.md) para o contrato esperado.
-
-## Documentação complementar
-
-- [`docs/evidencias.md`](docs/evidencias.md) — relatório rastreável de evidências.
-- [`docs/roadmap.md`](docs/roadmap.md) — roadmap técnico em ordem de dependências.
-- [`docs/mvp.md`](docs/mvp.md) — definição funcional e técnica do MVP.
-- [`docs/pos-venda-wismo.md`](docs/pos-venda-wismo.md) — régua de entrega, motor de status e guia para o frontend do chatbot.
-
-## E-commerce e Supabase
-
-O storefront Vértice funciona em dois modos explícitos:
-
-- `DATA_SOURCE=local`: fixtures públicas para desenvolvimento visual.
-- `DATA_SOURCE=supabase`: catálogo, estoque, carrinho anônimo e decisões MIPO persistidos no projeto remoto.
-
-Não existe fallback silencioso entre os modos. O checkout não realiza cobrança comercial, mas registra pedidos demonstrativos idempotentes para rastrear o piloto.
-
-## Deploy na Vercel
-
-O repositório está preparado para dois projetos Vercel: a aplicação Next.js na raiz e o agente FastAPI com Root Directory `services/agent`. Publique o agente primeiro e configure sua URL HTTPS no projeto web. O roteiro completo, as variáveis por projeto, os smoke tests e o rollback estão em [`docs/deploy-vercel.md`](docs/deploy-vercel.md).
-
-Para executar a configuração guiada:
-
-```bash
-./scripts/setup-vercel.sh
+```mermaid
+flowchart LR
+    A[Dados do case] --> B[Supabase]
+    B --> C[Next.js / APIs server-side]
+    C --> D[Loja e checkout]
+    C --> E[Chatbot WISMO]
+    C --> F[Painel de gestão]
+    C --> G[Agente FastAPI]
+    G --> H[Explicação controlada]
+    D --> I[Decisões e feedback]
+    E --> J[Eventos e escalonamentos]
+    I --> B
+    J --> B
 ```
 
-### Configuração do zero
+## O que está implementado
+
+- catálogo e carrinho em modo local ou Supabase;
+- checkout demonstrativo idempotente, sem cobrança financeira;
+- motor determinístico de risco e recomendação de tamanho;
+- feedback sobre ajuste e registro de decisões do cliente;
+- concierge e auditoria de sacola como recursos experimentais;
+- consulta WISMO por código de pedido com SLA por canal e localização;
+- chatbot de dúvidas gerais pós-compra sem exigir código;
+- registro de avaliações, notas e eventos WISMO no Supabase;
+- painel gerencial com indicadores e simuladores explicitamente rotulados;
+- agente Python com autenticação, timeout, cache, auditoria e fallback determinístico;
+- importadores com *dry-run*, hash dos arquivos, quarentena e proteção contra repetição;
+- RLS nas tabelas e acesso ao banco somente por rotas server-side.
+
+## Tecnologias
+
+- **Web:** Next.js 16, React 19 e TypeScript;
+- **Visualização:** Recharts;
+- **Banco e persistência:** Supabase/PostgreSQL;
+- **Agente:** Python 3.12, FastAPI, LangGraph e Pydantic;
+- **IA:** EloAgents como provedor primário e Groq como fallback opcional;
+- **Qualidade:** Vitest, Pytest, TypeScript e suíte de avaliação offline do agente;
+- **Deploy:** Vercel em dois projetos, um para a aplicação web e outro para o agente.
+
+## Estrutura de pastas
+
+```text
+.
+├── analises/               # notebooks da exploração e validação metodológica
+├── data/                   # contrato dos dados; bases brutas não são versionadas
+├── docs/                   # arquitetura, evidências, MVP, roadmap, deploy e demo
+├── entregáveis/            # materiais finais do case e planilhas
+├── notebooks/              # análises auxiliares
+├── public/                 # imagens e demais arquivos estáticos
+├── scripts/                # importação, seed, reset e assistentes de configuração
+├── services/agent/         # agente FastAPI/LangGraph e sua suíte de avaliação
+├── src/
+│   ├── app/                # páginas e APIs do Next.js
+│   ├── components/         # componentes da interface
+│   ├── data/               # fixtures públicas para desenvolvimento local
+│   ├── domain/             # regras determinísticas e contratos de domínio
+│   ├── lib/                # utilitários e infraestrutura compartilhada
+│   ├── server/             # serviços exclusivamente server-side
+│   └── services/           # adaptadores de comércio, MIPO e WISMO
+├── supabase/migrations/    # esquema, RLS, funções e evoluções incrementais
+└── tests/                  # testes de unidade e integração da aplicação web
+```
+
+## Como rodar localmente
+
+### Pré-requisitos
+
+- Node.js 20;
+- Corepack e pnpm;
+- Python 3.12 e `uv` apenas para executar o agente;
+- projeto Supabase apenas para o modo persistido.
+
+### Aplicação web com dados locais
 
 ```bash
+git clone https://github.com/Bootcamp-EloGroup/mipo.git
+cd mipo
+corepack enable
 corepack pnpm install
-./scripts/setup-supabase.sh
+cp .env.example .env.local
 corepack pnpm dev
 ```
 
-O assistente cria `.env.local`, orienta a criação do `mipo-dev`, executa o dry-run das migrations e pede confirmação antes de qualquer escrita. Credenciais secretas não devem ser enviadas pelo chat ou commitadas.
+No `.env.local`, mantenha:
 
-Para configuração manual, copie `.env.example` para `.env.local`, use uma Secret key somente no servidor e execute:
+```dotenv
+DATA_SOURCE=local
+NEXT_PUBLIC_DATA_SOURCE=local
+AI_EXPLANATIONS_ENABLED=false
+```
+
+Acesse:
+
+- `http://localhost:3000/` — loja e checkout assistido;
+- `http://localhost:3000/pedido` — chatbot pós-compra/WISMO;
+- `http://localhost:3000/painel` — painel gerencial;
+- `http://localhost:3000/api/health` — verificação de saúde da aplicação.
+
+### Aplicação com Supabase
+
+Configure as variáveis abaixo em `.env.local`:
+
+```dotenv
+DATA_SOURCE=supabase
+NEXT_PUBLIC_DATA_SOURCE=supabase
+SUPABASE_URL=https://SEU_PROJECT_REF.supabase.co
+SUPABASE_SECRET_KEY=SEU_SECRET_SERVER_SIDE
+```
+
+Em seguida, vincule o projeto, revise as migrations e só então aplique-as:
 
 ```bash
 npx supabase login
@@ -83,78 +139,104 @@ npx supabase db push --dry-run
 npx supabase db push
 ```
 
-### Ingestão do case
+O assistente `./scripts/setup-supabase.sh` também conduz essa configuração. Nunca use o prefixo `NEXT_PUBLIC_` em uma chave secreta.
 
-O comando é dry-run por padrão:
+Para usar o WISMO real, não defina `NEXT_PUBLIC_WISMO_SOURCE=mock`. O valor `mock` deve ser reservado a demonstrações explicitamente controladas.
+
+### Agente de explicações
+
+Em outro terminal:
+
+```bash
+cd services/agent
+uv sync --dev
+uv run uvicorn mipo_agent.main:app --reload
+```
+
+Na aplicação web, configure:
+
+```dotenv
+AI_EXPLANATIONS_ENABLED=true
+MIPO_PYTHON_AGENT_URL=http://127.0.0.1:8000
+MIPO_PYTHON_AGENT_TOKEN=UM_TOKEN_COMPARTILHADO
+```
+
+Configure o mesmo token no processo do agente. As chaves `ELOAGENTS_API_KEY` e `GROQ_API_KEY` são opcionais e devem existir somente no servidor. Sem um provedor disponível, a experiência preserva a resposta determinística.
+
+## Importação dos dados do case
+
+As bases brutas não são publicadas porque contêm identificadores e registros em granularidade de cliente, pedido e atendimento. Obtenha os arquivos pela fonte autorizada e mantenha-os fora do Git.
+
+Os importadores executam *dry-run* por padrão:
 
 ```bash
 corepack pnpm data:import -- \
   --sales /caminho/vendas.csv \
   --inventory /caminho/estoque.csv
-```
 
-Depois de revisar o resumo, grave no Supabase com `--apply`. O importador calcula SHA-256 dos dois arquivos, rejeita conteúdo repetido, coloca linhas inválidas em quarentena e só torna uma execução utilizável quando ela chega ao estado `completed`.
-
-Os atributos de tamanho e cor inexistentes nos CSVs são armazenados com origem `synthetic`. Estoque é registrado como snapshot com data derivada da importação, nunca como série histórica.
-
-### Régua logística do pós-venda
-
-Um segundo comando, também dry-run por padrão, deriva o prazo de entrega por canal e estado a partir de `tempo_entrega_real`:
-
-```bash
 corepack pnpm data:import-logistics -- \
   --sales /caminho/vendas.csv \
   --customers /caminho/clientes.csv
 ```
 
-Ele nunca cria import run nem reescreve catálogo: intersecta com os pedidos já existentes e só preenche colunas novas em `orders`. Detalhes em [`docs/pos-venda-wismo.md`](docs/pos-venda-wismo.md).
+Revise o resumo e use `--apply` somente quando quiser persistir no Supabase. Outros importadores disponíveis estão documentados em [`data/README.md`](data/README.md).
 
-### API server-side
+## Testes e validação
 
-- `GET /api/products` e `GET /api/products/:id`
-- `GET /api/cart`, `DELETE /api/cart`
-- `POST /api/cart/items`
-- `PATCH /api/cart/items/:id`, `DELETE /api/cart/items/:id`
-- `POST /api/mipo/evaluate`
-- `POST /api/mipo/explain`
-- `POST /api/mipo/decisions`
-- `GET /api/dashboard`
-- `GET /api/wismo/orders/:orderKey` (aceita `?asOf=<ISO>`)
-- `GET /api/wismo/sla`
-- `POST /api/wismo/assessments`
+Na raiz do projeto:
 
-Todas as tabelas têm RLS habilitada e não concedem acesso a `anon` ou `authenticated`. A aplicação acessa a Data API apenas pelas rotas do Next.js.
+```bash
+corepack pnpm lint
+corepack pnpm test
+corepack pnpm build
+```
 
-## Painel e demonstração
-
-O painel agregado fica em `/painel`, sem identificadores completos de sessão ou dados pessoais. O catálogo diferencia explicitamente tipo de produto e significado da variante; a experiência atual seleciona somente itens de `Moda` para o fluxo de tamanho.
-
-Consulte [`docs/roteiro-demonstracao.md`](docs/roteiro-demonstracao.md). Para remover apenas sessões criadas explicitamente com `MIPO_DEMO_MODE=true`, execute `corepack pnpm data:reset-demo`; catálogo e histórico estão fora do escopo da função.
-
-## Agente ReAct
-
-Com `AI_EXPLANATIONS_ENABLED=true`, a avaliação determinística aparece imediatamente e o frontend solicita uma explicação enriquecida em segundo plano. O agente executa, em ordem, as tools `get_product_evidence`, `calculate_mipo_risk` e `get_allowed_actions`; somente então pode produzir `final_answer`. EloAgents é o provedor primário, Groq é o fallback e a mensagem determinística preserva a experiência se ambos falharem.
-
-Configure somente no servidor: `ELOAGENTS_API_KEY`, `ELOAGENTS_MODEL` e `GROQ_API_KEY`. O agente não acessa livremente o banco ou a internet, não mantém memória do usuário e não pode alterar risco, variante, estoque ou elegibilidade calculados pelo motor MIPO. Execuções e passos são auditados sem prompt bruto ou raciocínio interno.
-
-### Runtime Python
-
-O agente roda em FastAPI + LangGraph e mantém um contrato estreito com a rota Next.js. Inicie com `cd services/agent && uv sync --dev && uv run uvicorn mipo_agent.main:app --reload` e mantenha `MIPO_PYTHON_AGENT_URL=http://127.0.0.1:8000`. Se o processo Python estiver indisponível, a rota preserva a mensagem determinística; não existe um segundo agente em TypeScript.
-
-O desenho técnico e seus limites estão em [`docs/arquitetura-agente-react.md`](docs/arquitetura-agente-react.md).
-
-O próximo incremento planejado — corpus de avaliação, gates de segurança, métricas operacionais e hardening do runtime — está especificado em [`docs/specs/avaliacao-e-prontidao-agente.md`](docs/specs/avaliacao-e-prontidao-agente.md).
-
-### Avaliação do agente
-
-O gate padrão é totalmente offline e não requer credenciais:
+Para validar o agente sem rede ou credenciais:
 
 ```bash
 cd services/agent
 uv sync --dev
+uv run pytest
 uv run mipo-eval run --adapter offline
 ```
 
-Ele executa 22 cenários sintéticos e grava relatórios ignorados pelo Git em `services/agent/evals/results/`. O adapter HTTP valida o processo FastAPI completo. O modo `live` só executa com `--confirm-external-calls`; um smoke externo não substitui os gates determinísticos nem comprova impacto de negócio.
+O *smoke test* com provedores externos exige consentimento explícito e pode consumir cota. Consulte [`services/agent/README.md`](services/agent/README.md).
 
-Os últimos resultados sanitizados estão em [`docs/evidencias-avaliacao-agente.md`](docs/evidencias-avaliacao-agente.md).
+## Deploy
+
+O deploy completo usa dois projetos Vercel conectados à branch `main`:
+
+1. **`mipo-agent`:** FastAPI com Root Directory `services/agent`;
+2. **`mipo-web`:** Next.js com Root Directory `.`.
+
+Publique primeiro o agente, valide `/health` e `/ready`, e depois configure sua URL e o token compartilhado no projeto web. O passo a passo, as variáveis por ambiente, os *smoke tests* e o rollback estão em [`docs/deploy-vercel.md`](docs/deploy-vercel.md). Também é possível iniciar o fluxo guiado com:
+
+```bash
+./scripts/setup-vercel.sh
+```
+
+## Limites e governança
+
+- O checkout não processa pagamentos reais.
+- O MIPO não integra ERP, WMS, TMS ou transportadoras em tempo real.
+- Métricas financeiras históricas e cenários estimados não representam economia capturada.
+- Associação estatística não prova causalidade.
+- A IA explica evidências permitidas; regras determinísticas continuam responsáveis pelas decisões.
+- Dados brutos, prompts, credenciais, PII e raciocínio interno não devem ser versionados.
+- O painel expõe apenas dados agregados e identificadores adequadamente reduzidos.
+
+## Documentação
+
+- [`docs/evidencias.md`](docs/evidencias.md) — evidências e limites analíticos;
+- [`docs/mvp.md`](docs/mvp.md) — definição funcional do MVP;
+- [`docs/pos-venda-wismo.md`](docs/pos-venda-wismo.md) — regras e contrato do pós-venda;
+- [`docs/arquitetura-agente-react.md`](docs/arquitetura-agente-react.md) — arquitetura e governança do agente;
+- [`docs/roteiro-demonstracao.md`](docs/roteiro-demonstracao.md) — roteiro da demonstração;
+- [`docs/roadmap.md`](docs/roadmap.md) — evolução técnica planejada;
+- [`entregáveis/`](entregáveis/) — materiais finais do case.
+
+## Integrantes
+
+- [Christian Santos](https://www.linkedin.com/in/christian-gandra/)
+- [Juliana Mota](https://www.linkedin.com/in/juliana-mota-11456b238/)
+- [Yasmim Mattos](https://www.linkedin.com/in/yasmim-zeferino-37ba33355/)
